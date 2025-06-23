@@ -9,9 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.2.7",
+    "@tanstack/react-query": "^5.80.6",
+    "@wagmi/core": "^2.17.3",
+    "next": "15.3.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "next": "15.3.4"
+    "react-icons": "^5.5.0",
+    "viem": "~2.31.0",
+    "wagmi": "^2.15.6"
   },
   "devDependencies": {
     "typescript": "^5",
