@@ -77,12 +77,12 @@ export default function ComplaintPage() {
   });
 
   useEffect(() => {
-    // 检查用户注册状态
-    if (!isUserRegistered && isConnected) {
-      alert("您尚未注册，请先注册后再创建投诉");
+    // 检查用户注册状态，如果已连接钱包但未注册，直接跳转到注册页面
+    if (isConnected && contractAddress && isUserRegistered === false) {
+      console.log('用户未注册，跳转到注册页面');
       router.push('/register');
     }
-  }, [isUserRegistered, isConnected, router]);
+  }, [isUserRegistered, isConnected, contractAddress, router]);
 
   useEffect(() => {
     // 设置默认保证金

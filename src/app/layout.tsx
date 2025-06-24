@@ -6,6 +6,7 @@ import "./globals.css";
 import {ReactNode} from "react"
 import {Providers} from "./providers"
 import Header from "@/components/Header"
+import AuthGuard from "@/components/AuthGuard"
 
 export const metadata: Metadata = {
   title: "FoodGuard - 食品安全治理平台",
@@ -16,12 +17,14 @@ export const metadata: Metadata = {
 export default function RootLayout(props: {children: ReactNode}) {
   return (
     <html lang="zh-CN">
-      <body className="bg-gray-50 dark:bg-gray-900 min-h-screen">
+      <body>
         <Providers>
-          <Header />
-          <main className="pt-4">
-            {props.children}
-          </main>
+          <AuthGuard>
+            <Header />
+            <main>
+              {props.children}
+            </main>
+          </AuthGuard>
         </Providers>
       </body>
     </html>

@@ -1,36 +1,163 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FoodGuard - 食品安全治理平台
 
-## Getting Started
+基于区块链的去中心化食品安全投诉与治理系统。
 
-First, run the development server:
+## 🚀 项目概述
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+FoodGuard 是一个创新的食品安全治理平台，通过区块链技术实现透明、公正的食品安全监督体系。系统采用 DAO 治理模式，让社区成员参与食品安全问题的投票和质疑，确保公平公正的处理流程。
+
+## ✨ 核心功能
+
+### 🔐 用户注册系统
+- **普通用户注册**: 支付保证金后可创建投诉、参与投票和质疑
+- **企业用户注册**: 接受监督，需要更高的保证金以承担责任
+
+### 📝 投诉创建
+- 详细的投诉表单，包含事件描述、地点、时间等信息
+- 支持 IPFS 证据上传，确保证据的去中心化存储
+- 自动风险等级评估（低、中、高风险）
+
+### 🗳️ 去中心化投票
+- 随机选择 DAO 成员进行验证投票
+- 透明的投票过程和结果展示
+- 支持投票理由和证据提交
+
+### ⚖️ 质疑机制
+- 对验证者的投票结果进行质疑
+- 支持反对或支持验证者的决定
+- 质疑需要支付保证金，失败将被扣除
+
+### 💰 智能奖惩系统
+- 根据最终结果自动分配奖励和惩罚
+- 高风险案件直接冻结相关保证金
+- 完整的资金流转记录
+
+## 🛠️ 技术栈
+
+- **前端框架**: Next.js 15 + React 19
+- **样式系统**: TailwindCSS 4
+- **区块链交互**: Wagmi + Viem + RainbowKit
+- **状态管理**: TanStack Query
+- **开发语言**: TypeScript
+- **图标库**: React Icons
+
+## 📁 项目结构
+
+```
+foodguard-app/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── page.tsx           # 主页
+│   │   ├── layout.tsx         # 根布局
+│   │   ├── providers.tsx      # Web3 提供者
+│   │   ├── register/          # 用户注册
+│   │   ├── complaint/         # 创建投诉
+│   │   ├── cases/            # 案件列表
+│   │   ├── case/[id]/        # 案件详情
+│   │   └── profile/          # 个人中心
+│   ├── components/            # 可复用组件
+│   │   ├── Header.tsx        # 头部导航
+│   │   └── ui/               # UI 组件库
+│   ├── constants.tsx          # 合约 ABI 和常量
+│   └── rainbowkitConfig.tsx  # 钱包连接配置
+├── package.json
+└── README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🎯 核心流程
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 1. 存入保证金 → 2. 创建投诉 → 3. 风险评估
+```
+用户注册并支付保证金 → 创建详细投诉 → 系统自动评估风险等级
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. 投票验证 → 5. 质疑期 → 6. 奖惩分配
+```
+DAO成员投票验证 → 质疑者可以挑战结果 → 根据最终结果分配奖惩
+```
 
-## Learn More
+## 🌟 主要特性
 
-To learn more about Next.js, take a look at the following resources:
+- **🔒 去中心化**: 基于区块链技术，确保数据透明和不可篡改
+- **⚖️ 公平公正**: DAO 治理模式，社区成员共同参与决策
+- **🛡️ 安全可靠**: 多重验证机制，防止恶意行为
+- **💡 用户友好**: 简洁直观的界面设计，易于使用
+- **📱 响应式**: 支持桌面和移动设备
+- **🌙 深色模式**: 支持明暗主题切换
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🚀 快速开始
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 环境要求
+- Node.js 18+
+- pnpm
 
-## Deploy on Vercel
+### 安装依赖
+```bash
+pnpm install
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 启动开发服务器
+```bash
+pnpm dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+访问 http://localhost:3000 查看应用
+
+### 构建生产版本
+```bash
+pnpm build
+pnpm start
+```
+
+## 📖 使用指南
+
+### 1. 连接钱包
+首次访问需要连接 Web3 钱包（MetaMask、WalletConnect 等）
+
+### 2. 注册账户
+选择注册为普通用户或企业用户，并支付相应保证金
+
+### 3. 创建投诉
+填写详细的投诉信息，上传相关证据
+
+### 4. 参与治理
+作为 DAO 成员参与投票验证和质疑过程
+
+### 5. 查看结果
+在个人中心查看参与记录和奖惩结果
+
+## 🔧 配置说明
+
+### 环境变量
+```bash
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id
+```
+
+### 合约地址配置
+在 `src/constants.tsx` 中配置不同网络的合约地址：
+
+```typescript
+export const chainsToFoodGuard = {
+  31337: {  // Anvil local
+    foodSafetyGovernance: "0x...",
+    fundManager: "0x...",
+    // ...
+  }
+}
+```
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request 来帮助改进项目。
+
+## 📄 许可证
+
+MIT License
+
+## 📞 联系我们
+
+如有任何问题或建议，请联系开发团队。
+
+---
+
+**FoodGuard** - 让食品安全更透明，让消费者权益更有保障！ 🛡️🍎

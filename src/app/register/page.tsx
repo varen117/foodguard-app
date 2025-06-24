@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAccount, useChainId, useWriteContract, useReadContract } from "wagmi";
 import { parseEther } from "viem";
-import { FaUser, FaBuilding, FaShieldAlt, FaInfoCircle } from "react-icons/fa";
+import { FaUser, FaBuilding, FaShieldAlt, FaInfoCircle, FaUsers, FaRocket, FaWallet, FaTwitter } from "react-icons/fa";
 import { chainsToFoodGuard, foodSafetyGovernanceAbi, fundManagerAbi } from "@/constants";
 
 export default function RegisterPage() {
@@ -17,6 +17,7 @@ export default function RegisterPage() {
   const chainId = useChainId();
   const [userType, setUserType] = useState<'user' | 'enterprise'>('user');
   const [depositAmount, setDepositAmount] = useState("");
+  const [twitterId, setTwitterId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const contractAddress = chainsToFoodGuard[chainId]?.foodSafetyGovernance;
@@ -51,12 +52,16 @@ export default function RegisterPage() {
     if (type === 'enterprise' || type === 'user') {
       setUserType(type);
     }
+  }, [searchParams]);
 
-    // 如果已经注册，重定向到主页
-    if (isUserRegistered) {
+  useEffect(() => {
+    // 只有在已连接钱包且确实已注册的情况下才跳转
+    // 增加额外检查确保这不是初始加载状态
+    if (isConnected && isUserRegistered === true && contractAddress) {
+      console.log('用户已注册，跳转到主页');
       router.push('/');
     }
-  }, [searchParams, isUserRegistered, router]);
+  }, [isConnected, isUserRegistered, contractAddress, router]);
 
   useEffect(() => {
     // 设置默认保证金金额
@@ -64,7 +69,10 @@ export default function RegisterPage() {
       const minDeposit = userType === 'enterprise' 
         ? systemConfig.minEnterpriseDeposit 
         : systemConfig.minComplaintDeposit;
-      setDepositAmount(parseEther(minDeposit.toString()).toString());
+      
+      // 直接使用 minDeposit 值，因为它已经是 Wei 单位
+      setDepositAmount(minDeposit.toString());
+      console.log('设置默认保证金:', { userType, minDeposit: minDeposit.toString() });
     }
   }, [systemConfig, userType]);
 
@@ -81,21 +89,46 @@ export default function RegisterPage() {
 
     try {
       setIsSubmitting(true);
+      console.log('开始注册:', { userType, depositAmount, contractAddress });
 
       const functionName = userType === 'enterprise' ? 'registerEnterprise' : 'registerUser';
       
-      await writeContractAsync({
+      const tx = await writeContractAsync({
         abi: foodSafetyGovernanceAbi,
         address: contractAddress as `0x${string}`,
         functionName,
         value: BigInt(depositAmount),
       });
 
-      alert(`${userType === 'enterprise' ? '企业' : '用户'}注册成功！`);
-      router.push('/');
+      console.log('注册交易成功:', tx);
+      
+      // 如果提供了Twitter ID，存储绑定关系
+      if (twitterId.trim()) {
+        try {
+          const twitterBindings = JSON.parse(localStorage.getItem('twitterBindings') || '{}');
+          twitterBindings[address] = {
+            twitterId: twitterId.trim(),
+            userType,
+            bindTime: Date.now()
+          };
+          localStorage.setItem('twitterBindings', JSON.stringify(twitterBindings));
+          console.log('Twitter ID绑定成功:', { address, twitterId: twitterId.trim() });
+        } catch (error) {
+          console.error('Twitter ID绑定失败:', error);
+        }
+      }
+      
+      alert(`${userType === 'enterprise' ? '企业' : '用户'}注册成功！${twitterId ? ' Twitter账户已绑定。' : ''}`);
+      
+      // 延迟跳转，让用户看到成功消息
+      setTimeout(() => {
+        router.push('/');
+      }, 1000);
+      
     } catch (error) {
       console.error('注册失败:', error);
-      alert('注册失败，请重试');
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      alert(`注册失败: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -103,15 +136,135 @@ export default function RegisterPage() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center">
-          <FaShieldAlt className="w-16 h-16 text-emerald-600 mx-auto mb-6" />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-            请连接钱包
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            您需要连接钱包才能注册使用FoodGuard系统
-          </p>
+      <div className="min-h-screen relative overflow-hidden">
+        {/* 背景装饰 */}
+        <div className="absolute inset-0">
+          <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl animate-pulse-glow"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse-glow" style={{animationDelay: '2s'}}></div>
+        </div>
+        
+        <div className="relative z-10 flex items-center justify-center min-h-screen px-4 py-8">
+          <div className="max-w-6xl w-full grid lg:grid-cols-2 gap-8 lg:gap-16 items-center">
+            
+            {/* 左侧：品牌介绍 */}
+            <div className="text-center lg:text-left animate-fade-in-up">
+              <div className="flex items-center justify-center lg:justify-start mb-8">
+                <div className="icon-container mr-4">
+                  <FaShieldAlt className="w-12 h-12 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-5xl font-bold gradient-text">
+                    FoodGuard
+                  </h1>
+                  <p className="text-emerald-400 text-lg font-medium">
+                    Food Safety Governance
+                  </p>
+                </div>
+              </div>
+              
+              <p className="text-xl text-gray-300 mb-8 leading-relaxed">
+                基于区块链技术的去中心化食品安全投诉与治理系统，
+                构建透明、可信、高效的食品安全监管新生态
+              </p>
+              
+              <div className="space-y-8">
+                <div className="flex items-start gap-4 group">
+                  <div className="icon-container flex-shrink-0 w-12 h-12 group-hover:scale-110 transition-transform duration-300">
+                    <FaShieldAlt className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-emerald-400 transition-colors duration-300">区块链透明可信</h3>
+                    <p className="text-gray-400 group-hover:text-gray-300 transition-colors duration-300">所有投诉和处理过程上链存储，确保数据不可篡改</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-4 group">
+                  <div className="icon-container flex-shrink-0 w-12 h-12 group-hover:scale-110 transition-transform duration-300">
+                    <FaUsers className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-emerald-400 transition-colors duration-300">去中心化治理</h3>
+                    <p className="text-gray-400 group-hover:text-gray-300 transition-colors duration-300">社区驱动的治理机制，让每个参与者都有发言权</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-4 group">
+                  <div className="icon-container flex-shrink-0 w-12 h-12 group-hover:scale-110 transition-transform duration-300">
+                    <FaRocket className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-emerald-400 transition-colors duration-300">智能合约执行</h3>
+                    <p className="text-gray-400 group-hover:text-gray-300 transition-colors duration-300">自动化执行治理规则，提高处理效率和公正性</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* 右侧：连接钱包 */}
+            <div className="flex justify-center lg:justify-end animate-fade-in-up-delay">
+              <div className="card max-w-md w-full">
+                <div className="p-8">
+                  <div className="text-center mb-8">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl mb-6 shadow-lg">
+                      <FaWallet className="w-8 h-8 text-white" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-3">
+                      开始您的安全之旅
+                    </h2>
+                    <p className="text-gray-700">
+                      连接钱包，注册成为FoodGuard社区的一员
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    <div className="glass-card p-6 text-center">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                        钱包连接
+                      </h3>
+                      <div className="mb-6">
+                        <div className="wallet-connect-animation">
+                          <div className="wallet-icon-container">
+                            <FaWallet className="wallet-icon" />
+                          </div>
+                          <div className="connection-dots">
+                            <span className="dot dot-1"></span>
+                            <span className="dot dot-2"></span>
+                            <span className="dot dot-3"></span>
+                          </div>
+                          <div className="shield-icon-container">
+                            <FaShieldAlt className="shield-icon" />
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-3 text-center">
+                          正在等待连接...
+                        </p>
+                      </div>
+                      <div className="connect-wallet-container">
+                        {/* ConnectButton 会自动显示在这里 */}
+                      </div>
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500 mb-4">
+                        支持的钱包类型
+                      </p>
+                      <div className="flex justify-center gap-3">
+                        <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg flex items-center justify-center border border-gray-700 hover:border-orange-500 transition-all duration-300 hover:scale-105">
+                          <span className="text-orange-500 font-bold text-sm">MM</span>
+                        </div>
+                        <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg flex items-center justify-center border border-gray-700 hover:border-blue-500 transition-all duration-300 hover:scale-105">
+                          <span className="text-blue-500 font-bold text-sm">WC</span>
+                        </div>
+                        <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg flex items-center justify-center border border-gray-700 hover:border-indigo-500 transition-all duration-300 hover:scale-105">
+                          <span className="text-indigo-500 font-bold text-sm">CB</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -122,16 +275,18 @@ export default function RegisterPage() {
     : 0n;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12">
+    <div className="main-container py-12">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+        <div className="card overflow-hidden">
           {/* 头部 */}
-          <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-8 py-6">
+          <div className="hero-section px-8 py-6">
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-              <FaShieldAlt className="w-8 h-8" />
-              注册FoodGuard账户
+              <div className="icon-container">
+                <FaShieldAlt className="w-6 h-6 text-white" />
+              </div>
+              <span className="gradient-text">注册FoodGuard账户</span>
             </h1>
-            <p className="text-emerald-100 mt-2">
+            <p className="text-muted mt-2">
               选择您的账户类型并完成注册
             </p>
           </div>
@@ -183,6 +338,52 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {/* Twitter ID 绑定 */}
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Twitter ID 绑定 (可选)
+              </h3>
+              
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <FaTwitter className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1">
+                      Twitter 集成功能
+                    </h4>
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      绑定您的Twitter账户后，可以通过@FoodGuardBot在Twitter上快速创建投诉。
+                      这是可选功能，不会影响您在网站上的正常使用。
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <div className="flex items-center gap-2">
+                    <FaTwitter className="w-4 h-4 text-blue-500" />
+                    Twitter 用户名
+                  </div>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 dark:text-gray-400">@</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={twitterId}
+                    onChange={(e) => setTwitterId(e.target.value.replace('@', ''))}
+                    placeholder="your_twitter_username"
+                    className="w-full pl-8 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  />
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  输入您的Twitter用户名（不包含@符号）
+                </p>
+              </div>
+            </div>
+
             {/* 保证金设置 */}
             <div className="mb-8">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -231,7 +432,7 @@ export default function RegisterPage() {
             <button
               onClick={handleRegister}
               disabled={isSubmitting || !depositAmount}
-              className="w-full bg-emerald-600 text-white py-4 px-6 rounded-lg font-semibold hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="btn btn-primary w-full py-4"
             >
               {isSubmitting ? (
                 <div className="flex items-center justify-center gap-2">
