@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAccount, useChainId, useWriteContract, useReadContract } from "wagmi";
 import { parseEther } from "viem";
-import { FaUser, FaBuilding, FaShieldAlt, FaInfoCircle, FaUsers, FaRocket, FaWallet, FaTwitter } from "react-icons/fa";
+import { FaUser, FaBuilding, FaShieldAlt, FaInfoCircle, FaUsers, FaRocket, FaWallet, FaTwitter, FaVoteYea } from "react-icons/fa";
 import { chainsToFoodGuard, foodSafetyGovernanceAbi, fundManagerAbi } from "@/constants";
 
 export default function RegisterPage() {
@@ -15,7 +15,7 @@ export default function RegisterPage() {
   const searchParams = useSearchParams();
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const [userType, setUserType] = useState<'user' | 'enterprise'>('user');
+  const [userType, setUserType] = useState<'user' | 'dao' | 'enterprise'>('user');
   const [depositAmount, setDepositAmount] = useState("");
   const [twitterId, setTwitterId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -66,9 +66,16 @@ export default function RegisterPage() {
   useEffect(() => {
     // 设置默认保证金金额
     if (systemConfig) {
-      const minDeposit = userType === 'enterprise' 
-        ? systemConfig.minEnterpriseDeposit 
-        : systemConfig.minComplaintDeposit;
+      let minDeposit: bigint;
+      
+      if (userType === 'enterprise') {
+        minDeposit = systemConfig.minEnterpriseDeposit;
+      } else if (userType === 'dao') {
+        minDeposit = systemConfig.minDaoDeposit;
+      } else {
+        // 普通用户
+        minDeposit = systemConfig.minComplaintDeposit;
+      }
       
       // 直接使用 minDeposit 值，因为它已经是 Wei 单位
       setDepositAmount(minDeposit.toString());
@@ -91,7 +98,15 @@ export default function RegisterPage() {
       setIsSubmitting(true);
       console.log('开始注册:', { userType, depositAmount, contractAddress });
 
-      const functionName = userType === 'enterprise' ? 'registerEnterprise' : 'registerUser';
+      let functionName: 'registerUser' | 'registerEnterprise' | 'registerDaoMember';
+      
+      if (userType === 'enterprise') {
+        functionName = 'registerEnterprise';
+      } else if (userType === 'dao') {
+        functionName = 'registerDaoMember';
+      } else {
+        functionName = 'registerUser';
+      }
       
       const tx = await writeContractAsync({
         abi: foodSafetyGovernanceAbi,
@@ -118,7 +133,19 @@ export default function RegisterPage() {
         }
       }
       
-      alert(`${userType === 'enterprise' ? '企业' : '用户'}注册成功！${twitterId ? ' Twitter账户已绑定。' : ''}`);
+      const minDeposit = systemConfig 
+        ? (() => {
+            if (userType === 'enterprise') {
+              return systemConfig.minEnterpriseDeposit;
+            } else if (userType === 'dao') {
+              return systemConfig.minDaoDeposit;
+            } else {
+              return systemConfig.minComplaintDeposit;
+            }
+          })()
+        : 0n;
+
+      alert(`${userType === 'enterprise' ? '企业' : userType === 'dao' ? 'DAO组织成员' : '普通用户'}注册成功！${twitterId ? ' Twitter账户已绑定。' : ''}`);
       
       // 延迟跳转，让用户看到成功消息
       setTimeout(() => {
@@ -271,7 +298,15 @@ export default function RegisterPage() {
   }
 
   const minDeposit = systemConfig 
-    ? (userType === 'enterprise' ? systemConfig.minEnterpriseDeposit : systemConfig.minComplaintDeposit)
+    ? (() => {
+        if (userType === 'enterprise') {
+          return systemConfig.minEnterpriseDeposit;
+        } else if (userType === 'dao') {
+          return systemConfig.minDaoDeposit;
+        } else {
+          return systemConfig.minComplaintDeposit;
+        }
+      })()
     : 0n;
 
   return (
@@ -297,7 +332,7 @@ export default function RegisterPage() {
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                 选择账户类型
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <button
                   onClick={() => setUserType('user')}
                   className={`p-6 rounded-lg border-2 transition-all ${
@@ -313,7 +348,26 @@ export default function RegisterPage() {
                     普通用户
                   </h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    可以创建投诉、参与投票和质疑
+                    可以创建投诉、参与投票
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => setUserType('dao')}
+                  className={`p-6 rounded-lg border-2 transition-all ${
+                    userType === 'dao'
+                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-purple-300'
+                  }`}
+                >
+                  <FaVoteYea className={`w-8 h-8 mx-auto mb-3 ${
+                    userType === 'dao' ? 'text-purple-600' : 'text-gray-400'
+                  }`} />
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
+                    DAO组织成员
+                  </h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    参与治理决策、高级投票权限
                   </p>
                 </button>
 
@@ -400,7 +454,9 @@ export default function RegisterPage() {
                     <p className="text-sm text-blue-800 dark:text-blue-200">
                       {userType === 'enterprise' 
                         ? '企业保证金用于承担违规风险，最小金额较高以确保企业责任。'
-                        : '用户保证金用于防止恶意投诉，金额相对较低。'
+                        : userType === 'dao' 
+                          ? 'DAO组织成员保证金用于防止恶意投诉，金额相对较高。'
+                          : '用户保证金用于防止恶意投诉，金额相对较低。'
                       }
                     </p>
                     <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
@@ -440,7 +496,7 @@ export default function RegisterPage() {
                   注册中...
                 </div>
               ) : (
-                `注册为${userType === 'enterprise' ? '企业' : '用户'}`
+                `注册为${userType === 'enterprise' ? '企业' : userType === 'dao' ? 'DAO组织成员' : '普通用户'}`
               )}
             </button>
 

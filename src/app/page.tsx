@@ -1,31 +1,21 @@
 /**
- * FoodGuard 主页
+ * FoodGuard 主页面
  */
 "use client"
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAccount, useChainId, useReadContract } from "wagmi";
-import { FaShieldAlt, FaPlus, FaEye, FaUsers, FaGavel, FaChartLine } from "react-icons/fa";
+import { FaShieldAlt, FaHome, FaPlus, FaEye, FaUsers, FaGavel, FaChartLine, FaVoteYea } from "react-icons/fa";
 import { chainsToFoodGuard, foodSafetyGovernanceAbi, CaseInfo, CaseStatus, RiskLevel } from "@/constants";
 
 export default function HomePage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const [recentCases, setRecentCases] = useState<CaseInfo[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // 获取合约地址
   const contractAddress = chainsToFoodGuard[chainId]?.foodSafetyGovernance;
-
-  // 获取案件总数
-  const { data: totalCases = 0n } = useReadContract({
-    abi: foodSafetyGovernanceAbi,
-    address: contractAddress as `0x${string}`,
-    functionName: 'getTotalCases',
-    query: {
-      enabled: !!contractAddress,
-    },
-  });
 
   // 获取用户注册状态
   const { data: isUserRegistered = false } = useReadContract({
@@ -38,45 +28,49 @@ export default function HomePage() {
     },
   });
 
+  // 获取案件总数
+  const { data: totalCases = 0n } = useReadContract({
+    abi: foodSafetyGovernanceAbi,
+    address: contractAddress as `0x${string}`,
+    functionName: 'getTotalCases',
+    query: {
+      enabled: !!contractAddress,
+    },
+  });
+
   // 获取最近的案件
   useEffect(() => {
-    if (totalCases > 0n && contractAddress) {
-      const fetchRecentCases = async () => {
-        const cases: CaseInfo[] = [];
-        const start = Number(totalCases) > 5 ? Number(totalCases) - 4 : 1;
-        
-        for (let i = start; i <= Number(totalCases); i++) {
-          try {
-            // 这里需要实际调用合约获取案件信息
-            // 由于演示目的，我们创建模拟数据
-            const mockCase: CaseInfo = {
-              caseId: BigInt(i),
-              complainant: "0x1234...5678",
-              enterprise: "0x8765...4321",
-              complaintTitle: `案件 #${i} - 食品安全投诉`,
-              complaintDescription: "相关食品安全问题的详细描述...",
-              location: "北京市朝阳区",
-              incidentTime: BigInt(Date.now() - 86400000),
-              complaintTime: BigInt(Date.now() - 43200000),
-              status: i % 3 === 0 ? CaseStatus.VOTING : i % 3 === 1 ? CaseStatus.CHALLENGING : CaseStatus.COMPLETED,
-              riskLevel: i % 3 === 0 ? RiskLevel.HIGH : i % 3 === 1 ? RiskLevel.MEDIUM : RiskLevel.LOW,
-              complaintUpheld: Math.random() > 0.5,
-              complainantDeposit: BigInt("1000000000000000000"), // 1 ETH
-              enterpriseDeposit: BigInt("2000000000000000000"), // 2 ETH
-              isCompleted: i % 3 === 2,
-              completionTime: i % 3 === 2 ? BigInt(Date.now()) : 0n,
-            };
-            cases.push(mockCase);
-          } catch (error) {
-            console.error(`Failed to fetch case ${i}:`, error);
-          }
-        }
-        setRecentCases(cases.reverse());
-      };
+    const fetchRecentCases = async () => {
+      setLoading(true);
+      
+      // 这里使用模拟数据，实际应用中应该调用合约方法
+      const mockCases: CaseInfo[] = [];
+      for (let i = 1; i <= 6; i++) {
+        mockCases.push({
+          caseId: BigInt(i),
+          complainant: `0x${'1'.repeat(40)}`,
+          enterprise: `0x${'2'.repeat(40)}`,
+          complaintTitle: `食品安全投诉案件 #${i}`,
+          complaintDescription: `详细的投诉描述内容，涉及食品安全相关问题...`,
+          location: "北京市朝阳区",
+          incidentTime: BigInt(Date.now() - 86400000 * i), // i天前
+          complaintTime: BigInt(Date.now() - 86400000 * i + 3600000), // i天前 + 1小时
+          status: [CaseStatus.PENDING, CaseStatus.VOTING, CaseStatus.CHALLENGING, CaseStatus.COMPLETED][i % 4],
+          riskLevel: [RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH][i % 3],
+          complaintUpheld: i % 2 === 0,
+          complainantDeposit: BigInt("1000000000000000000"), // 1 ETH
+          enterpriseDeposit: BigInt("2000000000000000000"), // 2 ETH
+          isCompleted: i % 3 === 0,
+          completionTime: i % 3 === 0 ? BigInt(Date.now()) : 0n,
+        });
+      }
+      
+      setRecentCases(mockCases);
+      setLoading(false);
+    };
 
-      fetchRecentCases();
-    }
-  }, [totalCases, contractAddress]);
+    fetchRecentCases();
+  }, []);
 
   const getStatusText = (status: CaseStatus) => {
     switch (status) {
@@ -126,10 +120,14 @@ export default function HomePage() {
                 <p className="text-white mb-8 text-lg font-medium">
                   您尚未注册，请选择注册类型：
                 </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
                   <Link href="/register?type=user" className="btn btn-primary">
                     <FaUsers className="w-4 h-4 mr-2" />
                     注册为用户
+                  </Link>
+                  <Link href="/register?type=dao" className="btn btn-secondary">
+                    <FaVoteYea className="w-4 h-4 mr-2" />
+                    DAO组织成员
                   </Link>
                   <Link href="/register?type=enterprise" className="btn btn-secondary">
                     <FaShieldAlt className="w-4 h-4 mr-2" />

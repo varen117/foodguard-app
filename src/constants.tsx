@@ -1,5 +1,33 @@
 /**
  * FoodGuard 合约常量和 ABI 定义
+ * 
+ * 数据交互规范说明：
+ * 
+ * 1. 合约数据（链上）- 使用 useReadContract 和 useWriteContract
+ *    - 用户注册状态、角色信息
+ *    - 案件基本信息（CaseInfo）
+ *    - 投票结果和状态
+ *    - 保证金余额和状态
+ *    - 系统配置参数
+ * 
+ * 2. 数据库数据（链下）- 使用 API 调用
+ *    - 用户详细资料（姓名、联系方式、头像等）
+ *    - 证据文件详情和元数据
+ *    - 用户操作日志和活动记录
+ *    - Twitter 绑定信息
+ *    - 通知消息和提醒
+ *    - 缓存数据用于提升性能
+ * 
+ * 3. 混合数据 - 需要同时查询合约和数据库
+ *    - 案件列表（基本信息来自合约，详细信息来自数据库）
+ *    - 用户资料页面（注册状态来自合约，个人信息来自数据库）
+ *    - 统计数据（部分来自合约事件，部分来自数据库聚合）
+ * 
+ * 所有 TODO 注释格式：
+ * - TODO: 合约接口 - functionName(params) 描述
+ * - TODO: 数据库查询 - SQL 或描述性说明
+ * - TODO: 数据库操作 - INSERT/UPDATE/DELETE 说明
+ * - TODO: 混合数据查询 - 需要合约+数据库的复合查询
  */
 
 // 合约地址映射 (chainId => contract addresses)
@@ -16,7 +44,7 @@ export const chainsToFoodGuard: { [key: number]: { [key: string]: string } } = {
 
 // 食品安全治理主合约 ABI
 export const foodSafetyGovernanceAbi = [
-  // 用户注册
+  // TODO: 合约接口 - 用户注册相关
   {
     inputs: [],
     name: "registerUser",
@@ -31,6 +59,13 @@ export const foodSafetyGovernanceAbi = [
     stateMutability: "payable",
     type: "function"
   },
+  {
+    inputs: [],
+    name: "registerDaoMember",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function"
+  },
   // 创建投诉
   {
     inputs: [
@@ -40,8 +75,7 @@ export const foodSafetyGovernanceAbi = [
       { name: "location", type: "string" },
       { name: "incidentTime", type: "uint256" },
       { name: "evidenceHashes", type: "string[]" },
-      { name: "evidenceTypes", type: "string[]" },
-      { name: "evidenceDescriptions", type: "string[]" }
+      { name: "riskLevel", type: "uint8" }
     ],
     name: "createComplaint",
     outputs: [{ name: "caseId", type: "uint256" }],
@@ -138,6 +172,13 @@ export const foodSafetyGovernanceAbi = [
     ],
     name: "UserRegistered",
     type: "event"
+  },
+  {
+    inputs: [],
+    name: "registerDaoMember",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function"
   }
 ] as const;
 
@@ -212,8 +253,11 @@ export const fundManagerAbi = [
       {
         components: [
           { name: "minComplaintDeposit", type: "uint256" },
+          { name: "maxComplaintDeposit", type: "uint256" },
           { name: "minEnterpriseDeposit", type: "uint256" },
-          { name: "minChallengeDeposit", type: "uint256" },
+          { name: "maxEnterpriseDeposit", type: "uint256" },
+          { name: "minDaoDeposit", type: "uint256" },
+          { name: "maxDaoDeposit", type: "uint256" },
           { name: "votingPeriod", type: "uint256" },
           { name: "challengePeriod", type: "uint256" },
           { name: "minValidators", type: "uint256" },
@@ -293,8 +337,11 @@ export interface VotingSessionInfo {
 // 系统配置类型
 export interface SystemConfig {
   minComplaintDeposit: bigint;
+  maxComplaintDeposit: bigint;
   minEnterpriseDeposit: bigint;
-  minChallengeDeposit: bigint;
+  maxEnterpriseDeposit: bigint;
+  minDaoDeposit: bigint;
+  maxDaoDeposit: bigint;
   votingPeriod: bigint;
   challengePeriod: bigint;
   minValidators: bigint;

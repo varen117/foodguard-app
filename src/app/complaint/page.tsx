@@ -30,6 +30,7 @@ export default function ComplaintPage() {
     location: "",
     incidentTime: "",
     depositAmount: "",
+    riskLevel: "0", // 默认低风险
   });
   
   const [evidences, setEvidences] = useState<Evidence[]>([
@@ -194,8 +195,6 @@ export default function ComplaintPage() {
       const validEvidences = evidences.filter(e => e.hash.trim() && e.description.trim());
       
       const evidenceHashes = validEvidences.map(e => e.hash);
-      const evidenceTypes = validEvidences.map(e => e.type);
-      const evidenceDescriptions = validEvidences.map(e => e.description);
 
       const incidentTimestamp = Math.floor(new Date(formData.incidentTime).getTime() / 1000);
 
@@ -210,8 +209,7 @@ export default function ComplaintPage() {
           formData.location,
           BigInt(incidentTimestamp),
           evidenceHashes,
-          evidenceTypes,
-          evidenceDescriptions,
+          parseInt(formData.riskLevel) as 0 | 1 | 2, // 转换为合约需要的 uint8
         ],
         value: BigInt(formData.depositAmount),
       });
@@ -330,6 +328,29 @@ export default function ComplaintPage() {
                   required
                   error={errors.incidentTime}
                 />
+
+                {/* 风险等级选择 */}
+                <div>
+                  <label className="form-label">
+                    风险等级 *
+                  </label>
+                  <select
+                    value={formData.riskLevel}
+                    onChange={handleInputChange('riskLevel')}
+                    className="form-input"
+                    required
+                  >
+                    <option value="0">低风险 - 一般食品安全问题</option>
+                    <option value="1">中风险 - 影响较大的食品安全问题</option>
+                    <option value="2">高风险 - 严重的食品安全问题，可能危及生命</option>
+                  </select>
+                  <p className="text-sm text-muted mt-1">
+                    请根据问题的严重程度选择合适的风险等级，这将影响保证金要求和处理流程
+                  </p>
+                  {errors.riskLevel && (
+                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.riskLevel}</p>
+                  )}
+                </div>
 
                 <InputField
                   label="保证金金额 (Wei)"

@@ -6,32 +6,46 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAccount, useChainId, useReadContract } from "wagmi";
-import { 
-  FaEye, 
-  FaFilter, 
-  FaSearch, 
-  FaGavel, 
-  FaUsers, 
-  FaChartLine,
-  FaShieldAlt,
-  FaClock,
-  FaMapMarkerAlt
-} from "react-icons/fa";
+import { FaSearch, FaFilter, FaEye, FaGavel, FaClock, FaCheckCircle, FaExclamationTriangle } from "react-icons/fa";
 import { chainsToFoodGuard, foodSafetyGovernanceAbi, CaseInfo, CaseStatus, RiskLevel } from "@/constants";
 
+interface CaseWithDetails extends CaseInfo {
+  // TODO: 从数据库获取的额外信息
+  complainantName?: string;          // 投诉者姓名 - 从数据库获取
+  enterpriseName?: string;           // 企业名称 - 从数据库获取
+  evidenceCount?: number;            // 证据数量 - 从数据库获取
+  viewCount?: number;                // 浏览次数 - 从数据库获取
+  lastUpdateTime?: bigint;           // 最后更新时间 - 从数据库获取
+  tags?: string[];                   // 标签 - 从数据库获取
+}
+
+interface FilterOptions {
+  status: string;
+  riskLevel: string;
+  dateRange: string;
+  searchKeyword: string;
+}
+
 export default function CasesPage() {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const [cases, setCases] = useState<CaseInfo[]>([]);
-  const [filteredCases, setFilteredCases] = useState<CaseInfo[]>([]);
+  const [cases, setCases] = useState<CaseWithDetails[]>([]);
+  const [filteredCases, setFilteredCases] = useState<CaseWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<CaseStatus | 'all'>('all');
-  const [riskFilter, setRiskFilter] = useState<RiskLevel | 'all'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const casesPerPage = 10;
+
+  const [filters, setFilters] = useState<FilterOptions>({
+    status: 'all',
+    riskLevel: 'all',
+    dateRange: 'all',
+    searchKeyword: ''
+  });
 
   const contractAddress = chainsToFoodGuard[chainId]?.foodSafetyGovernance;
 
-  // 获取案件总数
+  // TODO: 合约接口 - 获取案件总数
   const { data: totalCases = 0n } = useReadContract({
     abi: foodSafetyGovernanceAbi,
     address: contractAddress as `0x${string}`,
@@ -41,136 +55,169 @@ export default function CasesPage() {
     },
   });
 
-  // 获取案件数据
+  // TODO: 合约接口 - 获取活跃案件列表
+  const { data: activeCases = [] } = useReadContract({
+    abi: foodSafetyGovernanceAbi,
+    address: contractAddress as `0x${string}`,
+    functionName: 'getActiveCases',
+    query: {
+      enabled: !!contractAddress,
+    },
+  });
+
   useEffect(() => {
-    const fetchCases = async () => {
-      if (Number(totalCases) === 0) {
-        setLoading(false);
-        return;
-      }
+    loadCases();
+  }, [totalCases, contractAddress]);
 
+  const loadCases = async () => {
+    if (!contractAddress || totalCases === 0n) {
+      setLoading(false);
+      return;
+    }
+
+    try {
       setLoading(true);
-      const casesData: CaseInfo[] = [];
-
-      // 这里应该调用实际的合约方法，为了演示使用模拟数据
-      for (let i = 1; i <= Number(totalCases); i++) {
+      
+      // TODO: 混合数据查询 - 需要合约数据 + 数据库数据
+      // 1. 从合约获取案件基本信息
+      // 2. 从数据库获取案件详细信息和用户信息
+      
+      const allCases: CaseWithDetails[] = [];
+      const totalCaseCount = Number(totalCases);
+      
+      // 批量获取案件基本信息（从合约）
+      // TODO: 合约接口调用 - getCaseInfo(caseId)
+      for (let i = 1; i <= Math.min(totalCaseCount, 50); i++) {
         try {
-          // 实际应用中这里调用: await readContract(config, { ... getCaseInfo(i) })
-          const mockCase: CaseInfo = {
+          // 这里应该调用合约的 getCaseInfo 方法
+          // TODO: 合约接口 - getCaseInfo(i) 获取第i个案件信息
+          
+          // 临时使用模拟数据，实际应该从合约获取
+          const mockCaseInfo: CaseWithDetails = {
             caseId: BigInt(i),
             complainant: `0x${'1'.repeat(40)}`,
             enterprise: `0x${'2'.repeat(40)}`,
-            complaintTitle: `案件 #${i} - ${getRandomComplaintTitle()}`,
-            complaintDescription: getRandomDescription(),
-            location: getRandomLocation(),
-            incidentTime: BigInt(Date.now() - Math.random() * 86400000 * 30), // 30天内随机
-            complaintTime: BigInt(Date.now() - Math.random() * 86400000 * 15), // 15天内随机
-            status: getRandomStatus(),
-            riskLevel: getRandomRiskLevel(),
-            complaintUpheld: Math.random() > 0.5,
-            complainantDeposit: BigInt("1000000000000000000"), // 1 ETH
-            enterpriseDeposit: BigInt("2000000000000000000"), // 2 ETH
-            isCompleted: Math.random() > 0.7,
-            completionTime: Math.random() > 0.5 ? BigInt(Date.now()) : 0n,
+            complaintTitle: `食品安全投诉案件 #${i}`,
+            complaintDescription: `详细的投诉描述内容，涉及食品安全相关问题... (案件 ${i})`,
+            location: "北京市朝阳区",
+            incidentTime: BigInt(Date.now() - 86400000 * i),
+            complaintTime: BigInt(Date.now() - 86400000 * i + 3600000),
+            status: [CaseStatus.PENDING, CaseStatus.VOTING, CaseStatus.CHALLENGING, CaseStatus.COMPLETED][i % 4],
+            riskLevel: [RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH][i % 3],
+            complaintUpheld: i % 2 === 0,
+            complainantDeposit: BigInt("1000000000000000000"),
+            enterpriseDeposit: BigInt("2000000000000000000"),
+            isCompleted: i % 3 === 0,
+            completionTime: i % 3 === 0 ? BigInt(Date.now()) : 0n,
+            
+            // TODO: 数据库查询 - 根据案件ID获取以下补充信息
+            complainantName: `投诉者${i}`,      // SELECT complainant_name FROM users WHERE address = ?
+            enterpriseName: `企业${i}`,         // SELECT enterprise_name FROM enterprises WHERE address = ?
+            evidenceCount: Math.floor(Math.random() * 5) + 1,  // SELECT COUNT(*) FROM evidences WHERE case_id = ?
+            viewCount: Math.floor(Math.random() * 100),         // SELECT view_count FROM case_stats WHERE case_id = ?
+            lastUpdateTime: BigInt(Date.now() - Math.random() * 86400000), // SELECT last_update_time FROM case_updates WHERE case_id = ?
+            tags: ['食品安全', '投诉处理'][Math.floor(Math.random() * 2)] ? ['食品安全'] : ['投诉处理'] // SELECT tags FROM case_tags WHERE case_id = ?
           };
-          casesData.push(mockCase);
+
+          allCases.push(mockCaseInfo);
         } catch (error) {
-          console.error(`Failed to fetch case ${i}:`, error);
+          console.error(`获取案件 ${i} 信息失败:`, error);
         }
       }
 
-      setCases(casesData.reverse()); // 最新的在前面
+      // TODO: 数据库操作 - 批量获取案件的补充信息
+      // const caseIds = allCases.map(c => Number(c.caseId));
+      // const caseDetails = await fetchCaseDetails(caseIds);
+      // const userNames = await fetchUserNames(allCases.map(c => [c.complainant, c.enterprise]).flat());
+      
+      setCases(allCases);
+      setFilteredCases(allCases);
+      
+      // TODO: 数据库操作 - 记录用户访问案件列表页面的行为
+      // INSERT INTO user_activities (user_address, activity_type, page, timestamp) VALUES (?, 'view_cases_list', 'cases', ?)
+      if (address) {
+        console.log('TODO: 记录用户访问案件列表页面:', { userAddress: address, timestamp: Date.now() });
+      }
+      
+    } catch (error) {
+      console.error('加载案件列表失败:', error);
+    } finally {
       setLoading(false);
-    };
+    }
+  };
 
-    fetchCases();
-  }, [totalCases]);
-
-  // 应用筛选和搜索
+  // 应用筛选
   useEffect(() => {
     let filtered = [...cases];
 
-    // 搜索筛选
-    if (searchQuery) {
-      filtered = filtered.filter(c => 
-        c.complaintTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.caseId.toString().includes(searchQuery)
-      );
-    }
-
     // 状态筛选
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(c => c.status === statusFilter);
+    if (filters.status !== 'all') {
+      filtered = filtered.filter(c => {
+        switch (filters.status) {
+          case 'active':
+            return [CaseStatus.PENDING, CaseStatus.VOTING, CaseStatus.CHALLENGING].includes(c.status);
+          case 'completed':
+            return c.status === CaseStatus.COMPLETED;
+          case 'voting':
+            return c.status === CaseStatus.VOTING;
+          case 'challenging':
+            return c.status === CaseStatus.CHALLENGING;
+          default:
+            return true;
+        }
+      });
     }
 
     // 风险等级筛选
-    if (riskFilter !== 'all') {
-      filtered = filtered.filter(c => c.riskLevel === riskFilter);
+    if (filters.riskLevel !== 'all') {
+      const riskLevelNum = parseInt(filters.riskLevel);
+      filtered = filtered.filter(c => c.riskLevel === riskLevelNum);
+    }
+
+    // 日期范围筛选
+    if (filters.dateRange !== 'all') {
+      const now = Date.now();
+      const ranges = {
+        '1d': 24 * 60 * 60 * 1000,
+        '7d': 7 * 24 * 60 * 60 * 1000,
+        '30d': 30 * 24 * 60 * 60 * 1000,
+      };
+      const range = ranges[filters.dateRange as keyof typeof ranges];
+      if (range) {
+        filtered = filtered.filter(c => 
+          now - Number(c.complaintTime) * 1000 <= range
+        );
+      }
+    }
+
+    // 关键词搜索
+    if (filters.searchKeyword.trim()) {
+      const keyword = filters.searchKeyword.toLowerCase();
+      filtered = filtered.filter(c => 
+        c.complaintTitle.toLowerCase().includes(keyword) ||
+        c.complaintDescription.toLowerCase().includes(keyword) ||
+        c.location.toLowerCase().includes(keyword) ||
+        c.complainantName?.toLowerCase().includes(keyword) ||
+        c.enterpriseName?.toLowerCase().includes(keyword)
+      );
     }
 
     setFilteredCases(filtered);
-  }, [cases, searchQuery, statusFilter, riskFilter]);
+    setTotalPages(Math.ceil(filtered.length / casesPerPage));
+    setCurrentPage(1);
+  }, [cases, filters]);
 
-  // 辅助函数
-  const getRandomComplaintTitle = () => {
-    const titles = [
-      "食品变质投诉",
-      "餐厅卫生问题",
-      "食品添加剂超标",
-      "外卖食品安全问题",
-      "食品包装问题",
-      "餐具不洁净",
-      "食品保质期问题",
-      "食品成分标注不实"
-    ];
-    return titles[Math.floor(Math.random() * titles.length)];
+  const getCurrentPageCases = () => {
+    const startIndex = (currentPage - 1) * casesPerPage;
+    const endIndex = startIndex + casesPerPage;
+    return filteredCases.slice(startIndex, endIndex);
   };
 
-  const getRandomDescription = () => {
-    return "详细的投诉描述内容，包含了事件的具体情况和相关问题...";
-  };
-
-  const getRandomLocation = () => {
-    const locations = [
-      "北京市朝阳区",
-      "上海市浦东新区", 
-      "深圳市南山区",
-      "广州市天河区",
-      "杭州市西湖区",
-      "成都市锦江区"
-    ];
-    return locations[Math.floor(Math.random() * locations.length)];
-  };
-
-  const getRandomStatus = (): CaseStatus => {
-    const statuses = [
-      CaseStatus.PENDING,
-      CaseStatus.VOTING,
-      CaseStatus.CHALLENGING,
-      CaseStatus.COMPLETED
-    ];
-    return statuses[Math.floor(Math.random() * statuses.length)];
-  };
-
-  const getRandomRiskLevel = (): RiskLevel => {
-    const levels = [RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH];
-    return levels[Math.floor(Math.random() * levels.length)];
-  };
-
-  const getStatusColor = (status: CaseStatus) => {
-    switch (status) {
-      case CaseStatus.PENDING:
-        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-      case CaseStatus.VOTING:
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-      case CaseStatus.CHALLENGING:
-        return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
-      case CaseStatus.COMPLETED:
-        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-      default:
-        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200";
-    }
+  const handleFilterChange = (key: keyof FilterOptions, value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
   };
 
   const getStatusText = (status: CaseStatus) => {
@@ -195,23 +242,14 @@ export default function CasesPage() {
     }
   };
 
-  const getRiskLevelColor = (riskLevel: RiskLevel) => {
-    switch (riskLevel) {
-      case RiskLevel.LOW: return "text-green-600 dark:text-green-400";
-      case RiskLevel.MEDIUM: return "text-yellow-600 dark:text-yellow-400";
-      case RiskLevel.HIGH: return "text-red-600 dark:text-red-400";
-      default: return "text-gray-600 dark:text-gray-400";
-    }
-  };
-
   const getStatusIcon = (status: CaseStatus) => {
     switch (status) {
       case CaseStatus.VOTING:
-        return <FaUsers className="w-4 h-4" />;
+        return <FaGavel className="w-4 h-4" />;
       case CaseStatus.CHALLENGING:
-        return <FaChartLine className="w-4 h-4" />;
+        return <FaExclamationTriangle className="w-4 h-4" />;
       case CaseStatus.COMPLETED:
-        return <FaShieldAlt className="w-4 h-4" />;
+        return <FaCheckCircle className="w-4 h-4" />;
       default:
         return <FaClock className="w-4 h-4" />;
     }
@@ -219,196 +257,326 @@ export default function CasesPage() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center">
-          <FaShieldAlt className="w-16 h-16 text-emerald-600 mx-auto mb-6" />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-            请连接钱包
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            您需要连接钱包才能查看案件列表
-          </p>
+      <div className="main-container py-12">
+        <div className="max-w-2xl mx-auto text-center">
+          <div className="card p-8">
+            <FaGavel className="w-16 h-16 text-emerald-600 mx-auto mb-6" />
+            <h2 className="text-2xl font-bold text-card mb-4">
+              请连接钱包
+            </h2>
+            <p className="text-muted mb-6">
+              您需要连接钱包才能查看案件信息
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+    <div className="main-container py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* 页面头部 */}
         <div className="mb-8">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-white mb-4 flex items-center gap-3">
+            <div className="icon-container">
+              <FaGavel className="w-8 h-8 text-white" />
+            </div>
+            <span className="gradient-text">案件列表</span>
+          </h1>
+          <p className="text-muted">
+            查看所有食品安全投诉案件的处理情况
+          </p>
+        </div>
+
+        {/* 统计信息 */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="stat-card p-6">
+            <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-                  <FaGavel className="w-8 h-8 text-emerald-600" />
-                  案件列表
-                </h1>
-                <p className="text-gray-600 dark:text-gray-400 mt-2">
-                  查看所有食品安全投诉案件的处理状态
-                </p>
+                <p className="text-sm text-muted mb-1">总案件数</p>
+                <p className="text-2xl font-bold text-white">{Number(totalCases)}</p>
               </div>
-              <div className="text-right">
-                <p className="text-3xl font-bold text-emerald-600">
-                  {Number(totalCases)}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  总案件数
-                </p>
+              <div className="icon-container">
+                <FaGavel className="w-6 h-6 text-white" />
               </div>
             </div>
+          </div>
 
-            {/* 搜索和筛选 */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {/* 搜索框 */}
+          <div className="stat-card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted mb-1">处理中</p>
+                <p className="text-2xl font-bold text-white">
+                  {cases.filter(c => [CaseStatus.PENDING, CaseStatus.VOTING, CaseStatus.CHALLENGING].includes(c.status)).length}
+                </p>
+              </div>
+              <div className="icon-container">
+                <FaClock className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+
+          <div className="stat-card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted mb-1">已完成</p>
+                <p className="text-2xl font-bold text-white">
+                  {cases.filter(c => c.status === CaseStatus.COMPLETED).length}
+                </p>
+              </div>
+              <div className="icon-container">
+                <FaCheckCircle className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+
+          <div className="stat-card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted mb-1">高风险案件</p>
+                <p className="text-2xl font-bold text-white">
+                  {cases.filter(c => c.riskLevel === RiskLevel.HIGH).length}
+                </p>
+              </div>
+              <div className="icon-container">
+                <FaExclamationTriangle className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 筛选和搜索 */}
+        <div className="card p-6 mb-8">
+          <div className="flex items-center gap-4 mb-4">
+            <FaFilter className="w-5 h-5 text-emerald-600" />
+            <h3 className="text-lg font-semibold text-card">筛选条件</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                案件状态
+              </label>
+              <select
+                value={filters.status}
+                onChange={(e) => handleFilterChange('status', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              >
+                <option value="all">全部状态</option>
+                <option value="active">处理中</option>
+                <option value="voting">投票中</option>
+                <option value="challenging">质疑中</option>
+                <option value="completed">已完成</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                风险等级
+              </label>
+              <select
+                value={filters.riskLevel}
+                onChange={(e) => handleFilterChange('riskLevel', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              >
+                <option value="all">全部等级</option>
+                <option value="0">低风险</option>
+                <option value="1">中风险</option>
+                <option value="2">高风险</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                时间范围
+              </label>
+              <select
+                value={filters.dateRange}
+                onChange={(e) => handleFilterChange('dateRange', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              >
+                <option value="all">全部时间</option>
+                <option value="1d">最近1天</option>
+                <option value="7d">最近7天</option>
+                <option value="30d">最近30天</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                搜索关键词
+              </label>
               <div className="relative">
                 <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="搜索案件..."
+                  value={filters.searchKeyword}
+                  onChange={(e) => handleFilterChange('searchKeyword', e.target.value)}
+                  placeholder="搜索案件标题、描述..."
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
-              </div>
-
-              {/* 状态筛选 */}
-              <div className="relative">
-                <FaFilter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as CaseStatus | 'all')}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none"
-                >
-                  <option value="all">所有状态</option>
-                  <option value={CaseStatus.PENDING}>等待处理</option>
-                  <option value={CaseStatus.VOTING}>投票中</option>
-                  <option value={CaseStatus.CHALLENGING}>质疑中</option>
-                  <option value={CaseStatus.COMPLETED}>已完成</option>
-                </select>
-              </div>
-
-              {/* 风险等级筛选 */}
-              <div className="relative">
-                <FaFilter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <select
-                  value={riskFilter}
-                  onChange={(e) => setRiskFilter(e.target.value as RiskLevel | 'all')}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none"
-                >
-                  <option value="all">所有风险等级</option>
-                  <option value={RiskLevel.LOW}>低风险</option>
-                  <option value={RiskLevel.MEDIUM}>中风险</option>
-                  <option value={RiskLevel.HIGH}>高风险</option>
-                </select>
-              </div>
-
-              {/* 结果统计 */}
-              <div className="text-right">
-                <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {filteredCases.length}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  筛选结果
-                </p>
               </div>
             </div>
           </div>
         </div>
 
         {/* 案件列表 */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-          {loading ? (
-            <div className="p-12 text-center">
-              <div className="w-12 h-12 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-gray-500 dark:text-gray-400">加载案件数据中...</p>
-            </div>
-          ) : filteredCases.length === 0 ? (
-            <div className="p-12 text-center text-gray-500 dark:text-gray-400">
-              <FaGavel className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>暂无匹配的案件</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredCases.map((caseInfo) => (
-                <div key={Number(caseInfo.caseId)} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                  <div className="flex items-start justify-between">
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-muted mt-4">加载案件列表中...</p>
+          </div>
+        ) : filteredCases.length === 0 ? (
+          <div className="card p-12 text-center">
+            <FaGavel className="w-16 h-16 text-gray-400 mx-auto mb-6" />
+            <h3 className="text-xl font-semibold text-gray-600 mb-4">暂无案件</h3>
+            <p className="text-muted mb-6">
+              {filters.searchKeyword || filters.status !== 'all' || filters.riskLevel !== 'all' || filters.dateRange !== 'all'
+                ? '没有找到符合筛选条件的案件'
+                : '还没有案件被创建'}
+            </p>
+            {!filters.searchKeyword && filters.status === 'all' && filters.riskLevel === 'all' && filters.dateRange === 'all' && (
+              <Link href="/complaint" className="btn btn-primary">
+                创建第一个投诉
+              </Link>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="space-y-4 mb-8">
+              {getCurrentPageCases().map((caseInfo) => (
+                <div key={Number(caseInfo.caseId)} className="card p-6 hover-lift">
+                  <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-3">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-lg font-semibold text-card">
                           {caseInfo.complaintTitle}
                         </h3>
-                        <span className={`px-3 py-1 text-sm font-medium rounded-full flex items-center gap-1 ${getStatusColor(caseInfo.status)}`}>
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                          caseInfo.status === CaseStatus.VOTING ? 'bg-blue-100 text-blue-800' :
+                          caseInfo.status === CaseStatus.CHALLENGING ? 'bg-yellow-100 text-yellow-800' :
+                          caseInfo.status === CaseStatus.COMPLETED ? 'bg-green-100 text-green-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
                           {getStatusIcon(caseInfo.status)}
                           {getStatusText(caseInfo.status)}
                         </span>
-                        <span className={`text-sm font-medium ${getRiskLevelColor(caseInfo.riskLevel)}`}>
-                          {getRiskLevelText(caseInfo.riskLevel)}
-                        </span>
                       </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
-                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                          <FaMapMarkerAlt className="w-4 h-4" />
-                          <span className="text-sm">{caseInfo.location}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                          <FaClock className="w-4 h-4" />
-                          <span className="text-sm">
-                            投诉时间: {new Date(Number(caseInfo.complaintTime) * 1000).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <div className="text-sm text-gray-500 dark:text-gray-500">
-                          案件ID: #{Number(caseInfo.caseId)}
-                        </div>
-                      </div>
-
-                      <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2">
+                      
+                      <p className="text-gray-600 mb-4 line-clamp-2">
                         {caseInfo.complaintDescription}
                       </p>
-
-                      {/* 保证金信息 */}
-                      <div className="mt-3 flex items-center gap-6 text-sm">
-                        <div className="text-gray-500 dark:text-gray-400">
-                          投诉者保证金: {Number(caseInfo.complainantDeposit) / 1e18} ETH
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-muted">
+                        <div>
+                          <span className="font-medium">案件编号:</span> #{Number(caseInfo.caseId)}
                         </div>
-                        <div className="text-gray-500 dark:text-gray-400">
-                          企业保证金: {Number(caseInfo.enterpriseDeposit) / 1e18} ETH
+                        <div>
+                          <span className="font-medium">投诉者:</span> {caseInfo.complainantName || '匿名用户'}
                         </div>
-                        {caseInfo.isCompleted && (
-                          <div className="text-green-600 dark:text-green-400">
-                            ✓ 已完成处理
-                          </div>
-                        )}
+                        <div>
+                          <span className="font-medium">被投诉企业:</span> {caseInfo.enterpriseName || '未知企业'}
+                        </div>
+                        <div>
+                          <span className="font-medium">事发地点:</span> {caseInfo.location}
+                        </div>
+                        <div>
+                          <span className="font-medium">风险等级:</span> 
+                          <span className={`ml-1 font-medium ${
+                            caseInfo.riskLevel === RiskLevel.HIGH ? 'text-red-500' :
+                            caseInfo.riskLevel === RiskLevel.MEDIUM ? 'text-yellow-500' :
+                            'text-green-500'
+                          }`}>
+                            {getRiskLevelText(caseInfo.riskLevel)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-medium">证据数量:</span> {caseInfo.evidenceCount || 0}
+                        </div>
+                        <div>
+                          <span className="font-medium">浏览次数:</span> {caseInfo.viewCount || 0}
+                        </div>
+                        <div>
+                          <span className="font-medium">创建时间:</span> {new Date(Number(caseInfo.complaintTime) * 1000).toLocaleDateString()}
+                        </div>
                       </div>
                     </div>
-
-                    <div className="ml-6 flex flex-col gap-2">
+                    
+                    <div className="flex flex-col gap-2 ml-6">
                       <Link
                         href={`/case/${Number(caseInfo.caseId)}`}
-                        className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors inline-flex items-center gap-2 text-sm font-medium"
+                        className="btn btn-primary btn-sm"
+                        onClick={() => {
+                          // TODO: 数据库操作 - 记录用户点击查看案件详情的行为
+                          // INSERT INTO user_activities (user_address, activity_type, case_id, timestamp) VALUES (?, 'view_case_detail', ?, ?)
+                          console.log('TODO: 记录用户查看案件详情:', {
+                            userAddress: address,
+                            caseId: Number(caseInfo.caseId),
+                            timestamp: Date.now()
+                          });
+                        }}
                       >
-                        <FaEye className="w-4 h-4" />
+                        <FaEye className="w-4 h-4 mr-1" />
                         查看详情
                       </Link>
-                      
-                      {(caseInfo.status === CaseStatus.VOTING || caseInfo.status === CaseStatus.CHALLENGING) && (
-                        <Link
-                          href={`/case/${Number(caseInfo.caseId)}?action=participate`}
-                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2 text-sm font-medium"
-                        >
-                          <FaUsers className="w-4 h-4" />
-                          参与{caseInfo.status === CaseStatus.VOTING ? '投票' : '质疑'}
-                        </Link>
-                      )}
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-          )}
-        </div>
+
+            {/* 分页控件 */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="btn btn-secondary btn-sm disabled:opacity-50"
+                >
+                  上一页
+                </button>
+                
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 7) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 4) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 3) {
+                      pageNum = totalPages - 6 + i;
+                    } else {
+                      pageNum = currentPage - 3 + i;
+                    }
+                    
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                          currentPage === pageNum
+                            ? 'bg-emerald-600 text-white'
+                            : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="btn btn-secondary btn-sm disabled:opacity-50"
+                >
+                  下一页
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
