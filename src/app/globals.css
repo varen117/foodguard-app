@@ -109,6 +109,24 @@
     background: rgba(255, 255, 255, 0.2);
   }
   
+  .btn-outline {
+    background: transparent;
+    @apply text-white border-2 border-white;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+  }
+  
+  .btn-outline:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    @apply text-white;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+  }
+  
+  .btn-outline:disabled {
+    @apply border-gray-400 text-gray-400;
+    background: transparent;
+    box-shadow: none;
+  }
+  
   /* 表单输入样式 */
   .form-input {
     @apply w-full px-4 py-3 border rounded-xl transition-all duration-300;

@@ -10,12 +10,15 @@ import { formatEther } from "viem";
 import { FaUser, FaBuilding, FaShieldAlt, FaInfoCircle, FaUsers, FaRocket, FaWallet, FaVoteYea } from "react-icons/fa";
 import { useUserRegistration, useUserRegister, useSystemConfig } from "@/hooks/useContractInteraction";
 import { Toaster, toast } from "react-hot-toast";
+import TransactionStatus from "@/components/TransactionStatus";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function RegisterPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const queryClient = useQueryClient();
   const [userType, setUserType] = useState<'complainant' | 'dao' | 'enterprise'>('complainant');
   const [depositAmount, setDepositAmount] = useState("");
   const [registrationStep, setRegistrationStep] = useState<'form' | 'submitting' | 'waiting' | 'success'>('form');
@@ -38,6 +41,10 @@ export default function RegisterPage() {
     hash: transactionHashes.registerHash,
     query: {
       enabled: !!transactionHashes.registerHash,
+      // 禁用自动代币检测以避免调用symbol()和decimals()
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      structuralSharing: false,
     }
   });
 
@@ -46,6 +53,10 @@ export default function RegisterPage() {
     hash: transactionHashes.depositHash,
     query: {
       enabled: !!transactionHashes.depositHash,
+      // 禁用自动代币检测以避免调用symbol()和decimals()
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      structuralSharing: false,
     }
   });
 
@@ -92,12 +103,17 @@ export default function RegisterPage() {
         duration: 5000,
       });
       
+      // 刷新相关查询缓存以更新UI数据
+      queryClient.invalidateQueries({ queryKey: ['userRegistration'] });
+      queryClient.invalidateQueries({ queryKey: ['userDeposit'] });
+      queryClient.invalidateQueries({ queryKey: ['userStats'] });
+      
       // 延迟跳转到主页
       setTimeout(() => {
         router.push('/');
       }, 3000);
     }
-  }, [isRegisterSuccess, isDepositSuccess, registrationStep]);
+  }, [isRegisterSuccess, isDepositSuccess, registrationStep, queryClient]);
 
   // 处理交易失败
   useEffect(() => {
@@ -144,6 +160,10 @@ export default function RegisterPage() {
           toast.error("💰 余额不足，请确保账户有足够的ETH");
         } else if (error.message.includes('已经注册')) {
           toast.error("ℹ️ 您已经注册过了，请刷新页面");
+        } else if (error.message.includes('保证金存入失败')) {
+          toast.error("🔄 保证金存入失败，建议: 1) 检查ETH余额 2) 等待几秒后重试 3) 或先完成用户注册，稍后在个人资料页面存入保证金", { duration: 8000 });
+        } else if (error.message.includes('区块链网络错误')) {
+          toast.error("🌐 网络错误，请稍后重试", { duration: 5000 });
         } else {
           toast.error(`❌ 注册失败: ${error.message}`);
         }
@@ -403,6 +423,38 @@ export default function RegisterPage() {
                     </p>
                   </div>
                 </div>
+
+                {/* 交易状态显示 */}
+                {registrationStep === 'waiting' && (
+                  <div className="space-y-4">
+                    {transactionHashes.registerHash && (
+                      <TransactionStatus
+                        txHash={transactionHashes.registerHash}
+                        description="用户注册"
+                        chainId={chainId}
+                        onSuccess={(receipt) => {
+                          console.log('注册交易确认成功:', receipt);
+                        }}
+                        onError={(error) => {
+                          console.error('注册交易确认失败:', error);
+                        }}
+                      />
+                    )}
+                    {transactionHashes.depositHash && (
+                      <TransactionStatus
+                        txHash={transactionHashes.depositHash}
+                        description="保证金存入"
+                        chainId={chainId}
+                        onSuccess={(receipt) => {
+                          console.log('保证金交易确认成功:', receipt);
+                        }}
+                        onError={(error) => {
+                          console.error('保证金交易确认失败:', error);
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -497,6 +549,9 @@ export default function RegisterPage() {
                     </p>
                     <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
                       最小保证金: {minDeposit ? parseFloat(minDeposit) : 0} ETH
+                    </p>
+                    <p className="text-sm text-blue-700 dark:text-blue-200 mt-2 font-medium">
+                      💡 提示：请确保账户有足够余额支付保证金和gas费用（建议额外准备0.01 ETH作为gas费）
                     </p>
                   </div>
                 </div>

@@ -19,6 +19,7 @@ import {
   useDepositFunds,
   useWithdrawFunds
 } from "@/hooks/useContractInteraction";
+import TransactionStatus from "@/components/TransactionStatus";
 import { useUserStats, useUserCases } from '@/hooks/useDatabase';
 import { 
   CaseInfo,
@@ -26,6 +27,7 @@ import {
   RiskLevel 
 } from "@/constants";
 import { Toaster, toast } from "react-hot-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface UserProfile {
   // 数据库字段 - 用户基本信息表 (users)
@@ -79,6 +81,7 @@ interface ActivityRecord {
 export default function ProfilePage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const queryClient = useQueryClient();
   
   const [profile, setProfile] = useState<UserProfile>({});
   const [participatedCases, setParticipatedCases] = useState<ParticipatedCase[]>([]);
@@ -96,6 +99,7 @@ export default function ProfilePage() {
   const [transactionStep, setTransactionStep] = useState<'idle' | 'submitting' | 'waiting'>('idle');
   const [currentTransactionHash, setCurrentTransactionHash] = useState<`0x${string}` | undefined>();
   const [currentOperationType, setCurrentOperationType] = useState<'deposit' | 'withdraw' | undefined>();
+  const [showTransactionStatus, setShowTransactionStatus] = useState(false);
 
   // 合约接口 - 获取用户注册状态和信息
   const { isRegistered: isUserRegistered, userInfo } = useUserRegistration();
@@ -116,6 +120,10 @@ export default function ProfilePage() {
     hash: currentTransactionHash,
     query: {
       enabled: !!currentTransactionHash,
+      // 禁用自动代币检测以避免调用symbol()和decimals()
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      structuralSharing: false,
     }
   });
 
@@ -136,10 +144,15 @@ export default function ProfilePage() {
         toast.success("🎉 保证金提取成功！", { duration: 5000 });
       }
       
+      // 刷新相关查询缓存以更新UI数据
+      queryClient.invalidateQueries({ queryKey: ['userDeposit'] });
+      queryClient.invalidateQueries({ queryKey: ['userStats'] });
+      queryClient.invalidateQueries({ queryKey: ['userCases'] });
+      
       setCurrentTransactionHash(undefined);
       setCurrentOperationType(undefined);
     }
-  }, [isTransactionSuccess, transactionStep, currentOperationType]);
+  }, [isTransactionSuccess, transactionStep, currentOperationType, queryClient]);
 
   // 处理交易失败
   useEffect(() => {
@@ -158,18 +171,26 @@ export default function ProfilePage() {
       return;
     }
 
+    console.log('开始存入保证金:', { depositAmount });
     setTransactionStep('submitting');
     setCurrentOperationType('deposit');
 
     depositFunds({ amount: depositAmount }, {
       onSuccess: (hash) => {
+        console.log('存入保证金交易提交成功，hash:', hash);
+        console.log('hash类型:', typeof hash, 'hash长度:', hash?.length);
+        
         setTransactionStep('waiting');
         setCurrentTransactionHash(hash);
-        toast.success("交易已提交，正在等待区块链确认...", { duration: 3000 });
+        setShowTransactionStatus(true);
+        toast.success("存入交易已提交，正在等待区块链确认...", { duration: 3000 });
       },
-      onError: () => {
+      onError: (error) => {
+        console.error('存入保证金失败:', error);
         setTransactionStep('idle');
         setCurrentOperationType(undefined);
+        setShowTransactionStatus(false);
+        toast.error(`存入失败: ${error.message}`);
       }
     });
   };
@@ -188,11 +209,13 @@ export default function ProfilePage() {
       onSuccess: (hash) => {
         setTransactionStep('waiting');
         setCurrentTransactionHash(hash);
-        toast.success("交易已提交，正在等待区块链确认...", { duration: 3000 });
+        setShowTransactionStatus(true);
+        toast.success("提取交易已提交，正在等待区块链确认...", { duration: 3000 });
       },
       onError: () => {
         setTransactionStep('idle');
         setCurrentOperationType(undefined);
+        setShowTransactionStatus(false);
       }
     });
   };
@@ -607,7 +630,7 @@ export default function ProfilePage() {
                     </button>
                     <button
                       onClick={() => setShowWithdrawModal(true)}
-                      className="btn btn-secondary btn-sm"
+                      className="btn btn-primary btn-sm"
                       disabled={availableDeposit === 0n}
                     >
                       <FaMinus className="w-4 h-4 mr-2" />
@@ -659,6 +682,42 @@ export default function ProfilePage() {
                     ></div>
                   </div>
                 </div>
+
+                {/* 交易状态显示 */}
+                {showTransactionStatus && currentTransactionHash && (
+                  <div className="mt-6">
+                    <TransactionStatus
+                      txHash={currentTransactionHash}
+                      description={currentOperationType === 'deposit' ? '存入保证金' : '提取保证金'}
+                      chainId={chainId}
+                      onSuccess={(receipt) => {
+                        console.log('保证金操作确认成功:', receipt);
+                        
+                        if (currentOperationType === 'deposit') {
+                          setShowDepositModal(false);
+                          setDepositAmount("");
+                          toast.success("🎉 保证金存入成功！", { duration: 5000 });
+                        } else if (currentOperationType === 'withdraw') {
+                          setShowWithdrawModal(false);
+                          setWithdrawAmount("");
+                          toast.success("🎉 保证金提取成功！", { duration: 5000 });
+                        }
+                        
+                        setTransactionStep('idle');
+                        setCurrentTransactionHash(undefined);
+                        setCurrentOperationType(undefined);
+                        setShowTransactionStatus(false);
+                      }}
+                      onError={(error) => {
+                        console.error('保证金操作确认失败:', error);
+                        setTransactionStep('idle');
+                        setCurrentTransactionHash(undefined);
+                        setCurrentOperationType(undefined);
+                        setShowTransactionStatus(false);
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -805,7 +864,7 @@ export default function ProfilePage() {
                       onChange={(e) => editing && setEditForm({ ...editForm, name: e.target.value })}
                       disabled={!editing}
                       placeholder="请输入您的姓名"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50 text-gray-900"
                     />
                   </div>
 
@@ -820,7 +879,7 @@ export default function ProfilePage() {
                       onChange={(e) => editing && setEditForm({ ...editForm, email: e.target.value })}
                       disabled={!editing}
                       placeholder="请输入您的邮箱"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50 text-gray-900"
                     />
                   </div>
                   
@@ -835,7 +894,7 @@ export default function ProfilePage() {
                       onChange={(e) => editing && setEditForm({ ...editForm, phone: e.target.value })}
                       disabled={!editing}
                       placeholder="请输入您的电话号码"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50 text-gray-900"
                     />
                   </div>
                 </div>
@@ -851,7 +910,7 @@ export default function ProfilePage() {
                     onChange={(e) => editing && setEditForm({ ...editForm, address: e.target.value })}
                     disabled={!editing}
                     placeholder="请输入您的地址"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50 text-gray-900"
                   />
                 </div>
 
@@ -865,7 +924,7 @@ export default function ProfilePage() {
                     disabled={!editing}
                     placeholder="请输入您的个人简介"
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50 text-gray-900"
                   />
                 </div>
 
@@ -883,7 +942,7 @@ export default function ProfilePage() {
                         setEditing(false);
                         setEditForm(profile);
                       }}
-                      className="btn btn-secondary"
+                      className="btn btn-outline"
                     >
                       <FaTimes className="w-4 h-4 mr-2" />
                       取消
@@ -961,7 +1020,7 @@ export default function ProfilePage() {
                     setTransactionStep('idle');
                   }}
                   disabled={transactionStep !== 'idle'}
-                  className="btn btn-secondary flex-1"
+                  className="btn btn-outline flex-1"
                 >
                   取消
                 </button>
@@ -1023,7 +1082,7 @@ export default function ProfilePage() {
                     setTransactionStep('idle');
                   }}
                   disabled={transactionStep !== 'idle'}
-                  className="btn btn-secondary flex-1"
+                  className="btn btn-outline flex-1"
                 >
                   取消
                 </button>

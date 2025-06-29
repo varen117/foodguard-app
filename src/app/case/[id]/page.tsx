@@ -21,6 +21,8 @@ import {
   VoteChoice,
   ChallengeChoice
 } from "@/constants";
+import TransactionStatus from "@/components/TransactionStatus";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface EvidenceInfo {
   hash: string;
@@ -62,6 +64,7 @@ export default function CaseDetailPage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const caseId = parseInt(params.id as string);
+  const queryClient = useQueryClient();
   
   const [caseInfo, setCaseInfo] = useState<CaseInfo | null>(null);
   const [evidences, setEvidences] = useState<EvidenceInfo[]>([]);
@@ -80,6 +83,11 @@ export default function CaseDetailPage() {
   const [challengeReason, setChallengeReason] = useState("");
   const [selectedValidator, setSelectedValidator] = useState("");
   const [isChallenging, setIsChallenging] = useState(false);
+  
+  // 交易状态相关
+  const [currentTxHash, setCurrentTxHash] = useState<`0x${string}` | undefined>();
+  const [currentTxType, setCurrentTxType] = useState<'vote' | 'challenge' | undefined>();
+  const [showTransactionStatus, setShowTransactionStatus] = useState(false);
 
   const contractAddress = chainsToFoodGuard[chainId]?.foodSafetyGovernance;
   const votingDisputeManagerAddress = chainsToFoodGuard[chainId]?.votingDisputeManager;
@@ -107,10 +115,6 @@ export default function CaseDetailPage() {
       enabled: !!votingDisputeManagerAddress && !isNaN(caseId),
     },
   });
-
-  useEffect(() => {
-    loadCaseDetails();
-  }, [caseId, contractCaseInfo]);
 
   const loadCaseDetails = useCallback(async () => {
     if (!contractCaseInfo) {
@@ -229,6 +233,10 @@ export default function CaseDetailPage() {
     }
   }, [contractCaseInfo, contractVotingInfo, caseId, address, votingDisputeManagerAddress]);
 
+  useEffect(() => {
+    loadCaseDetails();
+  }, [loadCaseDetails]);
+
   const handleVote = async () => {
     if (!isConnected || !votingDisputeManagerAddress || !caseInfo) {
       alert("请先连接钱包");
@@ -239,8 +247,7 @@ export default function CaseDetailPage() {
       setIsVoting(true);
 
       // TODO: 合约接口调用 - 提交投票
-      // submitVote(caseId, choice, reason, evidenceHash)
-      await writeContractAsync({
+      const txHash = await writeContractAsync({
         abi: votingDisputeManagerAbi,
         address: votingDisputeManagerAddress as `0x${string}`,
         functionName: 'submitVote',
@@ -252,8 +259,12 @@ export default function CaseDetailPage() {
         ],
       });
 
+      console.log('投票交易已提交:', txHash);
+      setCurrentTxHash(txHash);
+      setCurrentTxType('vote');
+      setShowTransactionStatus(true);
+
       // TODO: 数据库操作 - 记录投票行为
-      // INSERT INTO vote_activities (user_address, case_id, vote_choice, reason, timestamp) VALUES (?, ?, ?, ?, ?)
       console.log('TODO: 记录投票行为:', {
         userAddress: address,
         caseId,
@@ -262,14 +273,9 @@ export default function CaseDetailPage() {
         timestamp: Date.now()
       });
 
-      alert("投票提交成功！");
-      // 重新加载投票信息
-      loadCaseDetails();
-
     } catch (error) {
       console.error('投票失败:', error);
       alert('投票失败，请重试');
-    } finally {
       setIsVoting(false);
     }
   };
@@ -284,8 +290,7 @@ export default function CaseDetailPage() {
       setIsChallenging(true);
 
       // TODO: 合约接口调用 - 提交质疑
-      // submitChallenge(caseId, challengeChoice, reason, evidenceHash)
-      await writeContractAsync({
+      const txHash = await writeContractAsync({
         abi: votingDisputeManagerAbi,
         address: votingDisputeManagerAddress as `0x${string}`,
         functionName: 'submitChallenge',
@@ -299,8 +304,12 @@ export default function CaseDetailPage() {
         value: BigInt("50000000000000000"), // 0.05 ETH 质疑保证金
       });
 
+      console.log('质疑交易已提交:', txHash);
+      setCurrentTxHash(txHash);
+      setCurrentTxType('challenge');
+      setShowTransactionStatus(true);
+
       // TODO: 数据库操作 - 记录质疑行为
-      // INSERT INTO challenge_activities (user_address, case_id, target_validator, challenge_choice, reason, timestamp) VALUES (?, ?, ?, ?, ?, ?)
       console.log('TODO: 记录质疑行为:', {
         userAddress: address,
         caseId,
@@ -310,14 +319,9 @@ export default function CaseDetailPage() {
         timestamp: Date.now()
       });
 
-      alert("质疑提交成功！");
-      // 重新加载案件信息
-      loadCaseDetails();
-
     } catch (error) {
       console.error('质疑失败:', error);
       alert('质疑失败，请重试');
-    } finally {
       setIsChallenging(false);
     }
   };
@@ -660,6 +664,59 @@ export default function CaseDetailPage() {
                     )}
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* 交易状态显示 */}
+            {showTransactionStatus && currentTxHash && (
+              <div className="card p-6">
+                <TransactionStatus
+                  txHash={currentTxHash}
+                  description={currentTxType === 'vote' ? '提交投票' : '提交质疑'}
+                  chainId={chainId}
+                  onSuccess={(receipt) => {
+                    console.log('交易确认成功:', receipt);
+                    
+                    if (currentTxType === 'vote') {
+                      setIsVoting(false);
+                      alert("投票提交成功！");
+                    } else if (currentTxType === 'challenge') {
+                      setIsChallenging(false);
+                      alert("质疑提交成功！");
+                    }
+                    
+                    // 刷新相关查询缓存以更新UI数据
+                    queryClient.invalidateQueries({ queryKey: ['caseInfo'] });
+                    queryClient.invalidateQueries({ queryKey: ['votingSession'] });
+                    queryClient.invalidateQueries({ queryKey: ['challengeSession'] });
+                    queryClient.invalidateQueries({ queryKey: ['cases'] });
+                    queryClient.invalidateQueries({ queryKey: ['activeCases'] });
+                    queryClient.invalidateQueries({ queryKey: ['userStats'] });
+                    queryClient.invalidateQueries({ queryKey: ['userCases'] });
+                    
+                    // 重新加载案件信息
+                    loadCaseDetails();
+                    
+                    // 清理状态
+                    setCurrentTxHash(undefined);
+                    setCurrentTxType(undefined);
+                    setShowTransactionStatus(false);
+                  }}
+                  onError={(error) => {
+                    console.error('交易确认失败:', error);
+                    
+                    if (currentTxType === 'vote') {
+                      setIsVoting(false);
+                    } else if (currentTxType === 'challenge') {
+                      setIsChallenging(false);
+                    }
+                    
+                    // 清理状态
+                    setCurrentTxHash(undefined);
+                    setCurrentTxType(undefined);
+                    setShowTransactionStatus(false);
+                  }}
+                />
               </div>
             )}
           </div>

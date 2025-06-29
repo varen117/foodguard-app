@@ -63,7 +63,7 @@ export function useUserRegistration() {
 
 // Hook: 用户注册（包含保证金存入）
 export function useUserRegister() {
-  const { writeContract } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
   const contracts = useContractAddresses();
   const { address } = useAccount();
@@ -95,11 +95,21 @@ export function useUserRegister() {
       try {
         console.log('开始注册用户:', { userType, userRole, depositAmount });
 
+        // 检查用户余额
+        const depositAmountWei = parseEther(depositAmount);
+        console.log('所需保证金 (Wei):', depositAmountWei);
+        
+        // 预估gas费用（大概 0.005 ETH 应该足够两个交易）
+        const estimatedGasCost = parseEther('0.005');
+        const totalRequired = depositAmountWei + estimatedGasCost;
+        
+        console.log('预估总费用 (包含gas):', totalRequired);
+
         // 第一步：调用治理合约注册用户
         console.log('步骤1: 请在钱包中批准用户注册交易...');
         toast.success("请在钱包中批准用户注册交易...", { duration: 3000 });
         
-        const registerHash = await writeContract({
+        const registerHash = await writeContractAsync({
           abi: foodSafetyGovernanceAbi,
           address: contracts.foodSafetyGovernance as `0x${string}`,
           functionName: 'registerUser',
@@ -107,27 +117,35 @@ export function useUserRegister() {
         });
 
         console.log('用户注册交易已提交，hash:', registerHash);
-        toast.success("注册交易已提交，正在准备保证金交易...", { duration: 2000 });
+        toast.success("注册交易已提交，正在等待确认...", { duration: 3000 });
 
-        // 添加延迟确保第一个交易被处理
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // 等待第一个交易确认（在本地测试网上至少需要等待一个区块）
+        console.log('等待用户注册交易确认...');
+        let confirmations = 0;
+        while (confirmations < 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 等待2秒
+          confirmations++;
+        }
 
         // 第二步：存入保证金
-        console.log('步骤2: 请在钱包中批准保证金存入交易...');
-        toast.success("请在钱包中批准保证金存入交易...", { duration: 3000 });
+        console.log('步骤2: 用户注册已确认，现在请在钱包中批准保证金存入交易...');
+        toast.success("注册已确认，请在钱包中批准保证金存入交易...", { duration: 3000 });
         
-        const depositHash = await writeContract({
+        const depositHash = await writeContractAsync({
           abi: fundManagerAbi,
           address: contracts.fundManager as `0x${string}`,
           functionName: 'depositFunds',
           value: parseEther(depositAmount),
+          gas: 100000n, // 显式设置gas limit
         });
 
         console.log('保证金存入交易已提交，hash:', depositHash);
+        console.log('注册完成，返回交易hash:', { registerHash, depositHash });
 
         return { registerHash, depositHash };
       } catch (error) {
         console.error('注册过程中发生错误:', error);
+        console.error('错误详情:', JSON.stringify(error, null, 2));
         
         // 更详细的错误处理
         if (error.message.includes('User rejected') || error.message.includes('rejected')) {
@@ -136,6 +154,15 @@ export function useUserRegister() {
           throw new Error("账户余额不足，请确保有足够的ETH支付gas费和保证金");
         } else if (error.message.includes('already registered')) {
           throw new Error("用户已经注册过了");
+        } else if (error.message.includes('Internal JSON-RPC error')) {
+          // 针对内部RPC错误的特殊处理
+          if (error.message.includes('depositFunds')) {
+            throw new Error("保证金存入失败，可能是因为用户状态未更新或余额不足。请稍后重试或检查账户余额。");
+          } else {
+            throw new Error("区块链网络错误，请稍后重试");
+          }
+        } else if (error.message.includes('execution reverted')) {
+          throw new Error("智能合约执行失败，请检查参数或稍后重试");
         } else {
           throw new Error(`注册失败: ${error.message}`);
         }
@@ -246,7 +273,7 @@ export function useUserDeposit() {
 
 // Hook: 存入保证金
 export function useDepositFunds() {
-  const { writeContract } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
   const contracts = useContractAddresses();
 
@@ -259,7 +286,7 @@ export function useDepositFunds() {
       try {
         console.log('正在存入保证金...', { amount });
         
-        const hash = await writeContract({
+        const hash = await writeContractAsync({
           abi: fundManagerAbi,
           address: contracts.fundManager as `0x${string}`,
           functionName: 'depositFunds',
@@ -267,8 +294,10 @@ export function useDepositFunds() {
         });
 
         console.log('保证金存入交易已提交，hash:', hash);
+        console.log('hash类型:', typeof hash, 'hash值:', hash);
         return hash;
       } catch (error) {
+        console.error('存入保证金失败:', error);
         throw error;
       }
     },
@@ -277,6 +306,10 @@ export function useDepositFunds() {
         duration: 3000,
       });
       console.log('保证金存入交易已提交:', hash);
+      
+      // 刷新相关查询缓存
+      queryClient.invalidateQueries({ queryKey: ['userDeposit'] });
+      queryClient.invalidateQueries({ queryKey: ['userStats'] });
     },
     onError: (error) => {
       if (error.message.includes('User rejected')) {
@@ -292,7 +325,7 @@ export function useDepositFunds() {
 
 // Hook: 提取保证金
 export function useWithdrawFunds() {
-  const { writeContract } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
   const contracts = useContractAddresses();
 
@@ -305,7 +338,7 @@ export function useWithdrawFunds() {
       try {
         console.log('正在提取保证金...', { amount });
         
-        const hash = await writeContract({
+        const hash = await writeContractAsync({
           abi: fundManagerAbi,
           address: contracts.fundManager as `0x${string}`,
           functionName: 'withdrawFunds',
@@ -313,8 +346,10 @@ export function useWithdrawFunds() {
         });
 
         console.log('保证金提取交易已提交，hash:', hash);
+        console.log('hash类型:', typeof hash, 'hash值:', hash);
         return hash;
       } catch (error) {
+        console.error('提取保证金失败:', error);
         throw error;
       }
     },
@@ -323,6 +358,10 @@ export function useWithdrawFunds() {
         duration: 3000,
       });
       console.log('保证金提取交易已提交:', hash);
+      
+      // 刷新相关查询缓存
+      queryClient.invalidateQueries({ queryKey: ['userDeposit'] });
+      queryClient.invalidateQueries({ queryKey: ['userStats'] });
     },
     onError: (error) => {
       if (error.message.includes('User rejected')) {
@@ -376,7 +415,7 @@ export function useWaitForSingleTransaction() {
 
 // Hook: 创建投诉
 export function useCreateComplaint() {
-  const { writeContract } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
   const contracts = useContractAddresses();
   const { address } = useAccount();
@@ -398,7 +437,7 @@ export function useCreateComplaint() {
       }
 
       try {
-        const hash = await writeContract({
+        const hash = await writeContractAsync({
           abi: foodSafetyGovernanceAbi,
           address: contracts.foodSafetyGovernance as `0x${string}`,
           functionName: 'createComplaint',
@@ -414,8 +453,10 @@ export function useCreateComplaint() {
           value: params.depositAmount ? parseEther(params.depositAmount) : undefined,
         });
 
+        console.log('创建投诉交易已提交，hash:', hash);
         return hash;
       } catch (error) {
+        console.error('创建投诉失败:', error);
         throw error;
       }
     },
@@ -532,7 +573,7 @@ export function useTotalCases() {
 
 // Hook: 投票功能
 export function useSubmitVote() {
-  const { writeContract } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
   const contracts = useContractAddresses();
   const { address } = useAccount();
@@ -550,7 +591,7 @@ export function useSubmitVote() {
       }
 
       try {
-        const hash = await writeContract({
+        const hash = await writeContractAsync({
           abi: votingDisputeManagerAbi,
           address: contracts.votingDisputeManager as `0x${string}`,
           functionName: 'submitVote',
@@ -562,8 +603,10 @@ export function useSubmitVote() {
           ],
         });
 
+        console.log('投票交易已提交，hash:', hash);
         return hash;
       } catch (error) {
+        console.error('投票失败:', error);
         throw error;
       }
     },
@@ -580,7 +623,7 @@ export function useSubmitVote() {
 
 // Hook: 质疑功能
 export function useSubmitChallenge() {
-  const { writeContract } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
   const contracts = useContractAddresses();
   const { address } = useAccount();
@@ -600,7 +643,7 @@ export function useSubmitChallenge() {
       }
 
       try {
-        const hash = await writeContract({
+        const hash = await writeContractAsync({
           abi: votingDisputeManagerAbi,
           address: contracts.votingDisputeManager as `0x${string}`,
           functionName: 'submitChallenge',
@@ -614,8 +657,10 @@ export function useSubmitChallenge() {
           value: parseEther(params.depositAmount),
         });
 
+        console.log('质疑交易已提交，hash:', hash);
         return hash;
       } catch (error) {
+        console.error('质疑失败:', error);
         throw error;
       }
     },
@@ -721,7 +766,7 @@ export function useSystemConfig() {
 
 // Hook: 结束投票并开始质疑
 export function useEndVotingAndStartChallenge() {
-  const { writeContract } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
   const contracts = useContractAddresses();
 
@@ -730,13 +775,14 @@ export function useEndVotingAndStartChallenge() {
       if (!contracts) throw new Error("合约地址未找到");
 
       // TODO: 合约接口 - endVotingAndStartChallenge() 结束投票开始质疑
-      const hash = await writeContract({
+      const hash = await writeContractAsync({
         abi: foodSafetyGovernanceAbi,
         address: contracts.foodSafetyGovernance as `0x${string}`,
         functionName: 'endVotingAndStartChallenge',
         args: [BigInt(caseId)],
       });
 
+      console.log('结束投票并开始质疑交易已提交，hash:', hash);
       return hash;
     },
     onSuccess: (hash) => {
@@ -752,7 +798,7 @@ export function useEndVotingAndStartChallenge() {
 
 // Hook: 结束质疑并处理奖惩
 export function useEndChallengeAndProcessRewards() {
-  const { writeContract } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
   const contracts = useContractAddresses();
 
@@ -761,13 +807,14 @@ export function useEndChallengeAndProcessRewards() {
       if (!contracts) throw new Error("合约地址未找到");
 
       // TODO: 合约接口 - endChallengeAndProcessRewards() 结束质疑处理奖惩
-      const hash = await writeContract({
+      const hash = await writeContractAsync({
         abi: foodSafetyGovernanceAbi,
         address: contracts.foodSafetyGovernance as `0x${string}`,
         functionName: 'endChallengeAndProcessRewards',
         args: [BigInt(caseId)],
       });
 
+      console.log('结束质疑并处理奖惩交易已提交，hash:', hash);
       return hash;
     },
     onSuccess: (hash) => {

@@ -11,6 +11,8 @@ import { InputField } from "@/components/ui/InputField";
 import { RiskLevel } from "@/constants";
 import { useUserRegistration, useCreateComplaint, useSystemConfig } from "@/hooks/useContractInteraction";
 import { Toaster, toast } from "react-hot-toast";
+import TransactionStatus from "@/components/TransactionStatus";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Evidence {
   hash: string;
@@ -22,6 +24,7 @@ export default function ComplaintPage() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const queryClient = useQueryClient();
   
   // 表单状态
   const [formData, setFormData] = useState({
@@ -36,6 +39,8 @@ export default function ComplaintPage() {
   
   const [evidenceHash, setEvidenceHash] = useState("");
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const [showTransactionStatus, setShowTransactionStatus] = useState(false);
 
   // TODO: 合约接口 - 获取用户注册状态和信息
   const { isRegistered: isUserRegistered, userInfo } = useUserRegistration();
@@ -162,13 +167,10 @@ export default function ComplaintPage() {
       complaintData,
       {
         onSuccess: (hash) => {
-          console.log('投诉创建成功:', hash);
-          toast.success("投诉创建成功！");
-          
-          // 延迟跳转，让用户看到成功消息
-          setTimeout(() => {
-            router.push('/cases');
-          }, 2000);
+          console.log('投诉交易已提交:', hash);
+          setTxHash(hash);
+          setShowTransactionStatus(true);
+          toast.success("投诉交易已提交，正在等待区块链确认...");
         },
         onError: (error) => {
           console.error('创建投诉失败:', error);
@@ -363,7 +365,7 @@ export default function ComplaintPage() {
                 <div className="pt-6">
                   <button
                     onClick={handleSubmit}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || showTransactionStatus}
                     className="w-full btn btn-primary text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? (
@@ -383,6 +385,38 @@ export default function ComplaintPage() {
                     点击创建投诉即表示您同意承担相应的法律责任
                   </p>
                 </div>
+
+                {/* 交易状态显示 */}
+                {showTransactionStatus && txHash && (
+                  <div className="mt-6">
+                    <TransactionStatus
+                      txHash={txHash}
+                      description="创建投诉"
+                      chainId={chainId}
+                      onSuccess={(receipt) => {
+                        console.log('投诉交易确认成功:', receipt);
+                        toast.success("🎉 投诉创建成功！", { duration: 5000 });
+                        
+                        // 刷新相关查询缓存以更新UI数据
+                        queryClient.invalidateQueries({ queryKey: ['cases'] });
+                        queryClient.invalidateQueries({ queryKey: ['totalCases'] });
+                        queryClient.invalidateQueries({ queryKey: ['activeCases'] });
+                        queryClient.invalidateQueries({ queryKey: ['userStats'] });
+                        queryClient.invalidateQueries({ queryKey: ['userCases'] });
+                        
+                        // 延迟跳转到案件列表页面
+                        setTimeout(() => {
+                          router.push('/cases');
+                        }, 3000);
+                      }}
+                      onError={(error) => {
+                        console.error('投诉交易确认失败:', error);
+                        setShowTransactionStatus(false);
+                        setTxHash(undefined);
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
