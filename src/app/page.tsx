@@ -5,94 +5,32 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useAccount, useChainId, useReadContract } from "wagmi";
+import { useAccount, useChainId } from "wagmi";
 import { FaShieldAlt, FaHome, FaPlus, FaEye, FaUsers, FaGavel, FaChartLine, FaVoteYea } from "react-icons/fa";
-import { chainsToFoodGuard, foodSafetyGovernanceAbi, CaseInfo, CaseStatus, RiskLevel } from "@/constants";
+import { CaseStatus, RiskLevel, getStatusText, getRiskLevelText, getStatusColor, getRiskLevelColor } from "@/constants";
+import { useUserRegistration, useActiveCases, useTotalCases } from "@/hooks/useContractInteraction";
+import { Toaster } from "react-hot-toast";
 
 export default function HomePage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const [recentCases, setRecentCases] = useState<CaseInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // TODO: 合约接口 - 获取用户注册状态和信息
+  const { isRegistered: isUserRegistered, userInfo } = useUserRegistration();
+  
+  // TODO: 合约接口 - 获取活跃案件列表
+  const { cases: recentCases, isLoading: loading } = useActiveCases();
+  
+  // TODO: 合约接口 - 获取案件总数
+  const totalCases = useTotalCases();
 
-  const contractAddress = chainsToFoodGuard[chainId]?.foodSafetyGovernance;
-
-  // 获取用户注册状态
-  const { data: isUserRegistered = false } = useReadContract({
-    abi: foodSafetyGovernanceAbi,
-    address: contractAddress as `0x${string}`,
-    functionName: 'isUserRegistered',
-    args: address ? [address] : undefined,
-    query: {
-      enabled: !!contractAddress && !!address,
-    },
-  });
-
-  // 获取案件总数
-  const { data: totalCases = 0n } = useReadContract({
-    abi: foodSafetyGovernanceAbi,
-    address: contractAddress as `0x${string}`,
-    functionName: 'getTotalCases',
-    query: {
-      enabled: !!contractAddress,
-    },
-  });
-
-  // 获取最近的案件
-  useEffect(() => {
-    const fetchRecentCases = async () => {
-      setLoading(true);
-      
-      // 这里使用模拟数据，实际应用中应该调用合约方法
-      const mockCases: CaseInfo[] = [];
-      for (let i = 1; i <= 6; i++) {
-        mockCases.push({
-          caseId: BigInt(i),
-          complainant: `0x${'1'.repeat(40)}`,
-          enterprise: `0x${'2'.repeat(40)}`,
-          complaintTitle: `食品安全投诉案件 #${i}`,
-          complaintDescription: `详细的投诉描述内容，涉及食品安全相关问题...`,
-          location: "北京市朝阳区",
-          incidentTime: BigInt(Date.now() - 86400000 * i), // i天前
-          complaintTime: BigInt(Date.now() - 86400000 * i + 3600000), // i天前 + 1小时
-          status: [CaseStatus.PENDING, CaseStatus.VOTING, CaseStatus.CHALLENGING, CaseStatus.COMPLETED][i % 4],
-          riskLevel: [RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH][i % 3],
-          complaintUpheld: i % 2 === 0,
-          complainantDeposit: BigInt("1000000000000000000"), // 1 ETH
-          enterpriseDeposit: BigInt("2000000000000000000"), // 2 ETH
-          isCompleted: i % 3 === 0,
-          completionTime: i % 3 === 0 ? BigInt(Date.now()) : 0n,
-        });
-      }
-      
-      setRecentCases(mockCases);
-      setLoading(false);
-    };
-
-    fetchRecentCases();
-  }, []);
-
-  const getStatusText = (status: CaseStatus) => {
-    switch (status) {
-      case CaseStatus.PENDING: return "等待处理";
-      case CaseStatus.DEPOSIT_LOCKED: return "保证金锁定";
-      case CaseStatus.VOTING: return "投票中";
-      case CaseStatus.CHALLENGING: return "质疑中";
-      case CaseStatus.REWARD_PUNISHMENT: return "奖惩处理";
-      case CaseStatus.COMPLETED: return "已完成";
-      case CaseStatus.CANCELLED: return "已取消";
-      default: return "未知状态";
-    }
-  };
-
-  const getRiskLevelText = (riskLevel: RiskLevel) => {
-    switch (riskLevel) {
-      case RiskLevel.LOW: return "低风险";
-      case RiskLevel.MEDIUM: return "中风险";
-      case RiskLevel.HIGH: return "高风险";
-      default: return "未知";
-    }
-  };
+  // 统计数据计算
+  const activeCasesCount = recentCases.filter(c => 
+    [CaseStatus.PENDING, CaseStatus.DEPOSIT_LOCKED, CaseStatus.VOTING, CaseStatus.CHALLENGING].includes(c.status)
+  ).length;
+  
+  const completedCasesCount = recentCases.filter(c => c.status === CaseStatus.COMPLETED).length;
+  const highRiskCasesCount = recentCases.filter(c => c.riskLevel === RiskLevel.HIGH).length;
 
   return (
     <div className="main-container">
@@ -121,15 +59,24 @@ export default function HomePage() {
                   您尚未注册，请选择注册类型：
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
-                  <Link href="/register?type=user" className="btn btn-primary">
+                  <Link 
+                    href="/register?type=user" 
+                    className="btn btn-primary"
+                  >
                     <FaUsers className="w-4 h-4 mr-2" />
                     注册为用户
                   </Link>
-                  <Link href="/register?type=dao" className="btn btn-secondary">
+                  <Link 
+                    href="/register?type=dao" 
+                    className="btn btn-secondary"
+                  >
                     <FaVoteYea className="w-4 h-4 mr-2" />
                     DAO组织成员
                   </Link>
-                  <Link href="/register?type=enterprise" className="btn btn-secondary">
+                  <Link 
+                    href="/register?type=enterprise" 
+                    className="btn btn-secondary"
+                  >
                     <FaShieldAlt className="w-4 h-4 mr-2" />
                     注册为企业
                   </Link>
@@ -137,11 +84,17 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/complaint" className="btn btn-primary">
+                <Link 
+                  href="/complaint" 
+                  className="btn btn-primary"
+                >
                   <FaPlus className="w-4 h-4 mr-2" />
                   创建投诉
                 </Link>
-                <Link href="/cases" className="btn btn-secondary">
+                <Link 
+                  href="/cases" 
+                  className="btn btn-secondary"
+                >
                   <FaEye className="w-4 h-4 mr-2" />
                   查看案件
                 </Link>
@@ -164,7 +117,7 @@ export default function HomePage() {
                   总案件数
                 </p>
                 <p className="text-3xl font-bold text-white">
-                  {Number(totalCases)}
+                  {totalCases}
                 </p>
               </div>
             </div>
@@ -177,10 +130,10 @@ export default function HomePage() {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted mb-1">
-                  活跃用户
+                  处理中案件
                 </p>
                 <p className="text-3xl font-bold text-white">
-                  1,234
+                  {activeCasesCount}
                 </p>
               </div>
             </div>
@@ -193,10 +146,10 @@ export default function HomePage() {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted mb-1">
-                  解决率
+                  已完成案件
                 </p>
                 <p className="text-3xl font-bold text-white">
-                  95%
+                  {completedCasesCount}
                 </p>
               </div>
             </div>
@@ -209,10 +162,10 @@ export default function HomePage() {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted mb-1">
-                  信誉评分
+                  高风险案件
                 </p>
                 <p className="text-3xl font-bold text-white">
-                  98.5
+                  {highRiskCasesCount}
                 </p>
               </div>
             </div>
@@ -224,39 +177,59 @@ export default function HomePage() {
           <div className="mb-16">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-3xl font-bold text-white">最近案件</h2>
-              <Link href="/cases" className="btn btn-secondary">
+              <Link 
+                href="/cases" 
+                className="btn btn-secondary"
+              >
                 查看全部
               </Link>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {recentCases.slice(0, 4).map((caseInfo) => (
-                <div key={Number(caseInfo.caseId)} className="card p-6 hover-lift">
-                  <div className="flex items-start justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-card mb-2">
-                      {caseInfo.complaintTitle}
-                    </h3>
-                    <span className={`status-badge ${caseInfo.status === CaseStatus.VOTING ? 'active' : 
-                      caseInfo.status === CaseStatus.CHALLENGING ? 'pending' : 
-                      caseInfo.status === CaseStatus.COMPLETED ? 'resolved' : 'pending'}`}>
-                      {getStatusText(caseInfo.status)}
-                    </span>
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="card p-6 animate-pulse">
+                    <div className="h-6 bg-gray-300 rounded mb-4"></div>
+                    <div className="h-4 bg-gray-300 rounded mb-2"></div>
+                    <div className="h-4 bg-gray-300 rounded w-3/4"></div>
                   </div>
-                  <p className="text-gray-600 mb-4 line-clamp-2">
-                    {caseInfo.complaintDescription}
-                  </p>
-                  <div className="flex items-center justify-between text-sm text-gray-500">
-                    <span>案件 #{Number(caseInfo.caseId)}</span>
-                    <span className={`font-medium ${
-                      caseInfo.riskLevel === RiskLevel.HIGH ? 'text-red-500' :
-                      caseInfo.riskLevel === RiskLevel.MEDIUM ? 'text-yellow-500' :
-                      'text-green-500'
-                    }`}>
-                      {getRiskLevelText(caseInfo.riskLevel)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {recentCases.slice(0, 4).map((caseInfo) => (
+                  <Link 
+                    key={Number(caseInfo.caseId)} 
+                    href={`/case/${Number(caseInfo.caseId)}`}
+                    className="card p-6 hover-lift cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-card mb-2">
+                        {caseInfo.complaintTitle}
+                      </h3>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(caseInfo.status)}`}>
+                        {getStatusText(caseInfo.status)}
+                      </span>
+                    </div>
+                    <p className="text-gray-600 mb-4 line-clamp-2">
+                      {caseInfo.complaintDescription}
+                    </p>
+                    <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
+                      <span>案件 #{Number(caseInfo.caseId)}</span>
+                      <span className={`font-medium ${getRiskLevelColor(caseInfo.riskLevel)}`}>
+                        {getRiskLevelText(caseInfo.riskLevel)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-gray-400">
+                      <span>投诉者: {caseInfo.complainant.slice(0, 8)}...{caseInfo.complainant.slice(-6)}</span>
+                      <span>企业: {caseInfo.enterprise.slice(0, 8)}...{caseInfo.enterprise.slice(-6)}</span>
+                    </div>
+                    <div className="mt-3 text-xs text-gray-400">
+                      创建时间: {new Date(Number(caseInfo.complaintTime) * 1000).toLocaleDateString()}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -293,6 +266,18 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+      
+      {/* Toast 通知组件 */}
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#333',
+            color: '#fff',
+          },
+        }}
+      />
     </div>
   );
 }

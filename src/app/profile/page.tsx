@@ -224,8 +224,8 @@ export default function ProfilePage() {
       // TODO: 数据库查询 - 获取用户活动记录
       // SELECT * FROM user_activities WHERE user_address = ? ORDER BY timestamp DESC LIMIT 20
       const mockActivities: ActivityRecord[] = [
-        {
-          id: 1,
+    {
+      id: 1,
           activityType: 'vote',
           description: '在案件 #1 中投票支持投诉',
           caseId: 1,
@@ -233,9 +233,9 @@ export default function ProfilePage() {
           result: 'success',
           rewardAmount: BigInt("100000000000000000"),
           penaltyAmount: BigInt("0")
-        },
-        {
-          id: 2,
+    },
+    {
+      id: 2,
           activityType: 'complaint',
           description: '创建了食品安全投诉案件',
           caseId: 2,
@@ -243,9 +243,9 @@ export default function ProfilePage() {
           result: 'failed',
           rewardAmount: BigInt("0"),
           penaltyAmount: BigInt("500000000000000000")
-        },
-        {
-          id: 3,
+    },
+    {
+      id: 3,
           activityType: 'challenge',
           description: '对案件 #3 的投票结果提出质疑',
           caseId: 3,
@@ -253,8 +253,8 @@ export default function ProfilePage() {
           result: 'success',
           rewardAmount: BigInt("75000000000000000"),
           penaltyAmount: BigInt("0")
-        }
-      ];
+    }
+  ];
       setActivities(mockActivities);
 
       // TODO: 数据库操作 - 更新最后访问时间
@@ -318,8 +318,8 @@ export default function ProfilePage() {
           <div className="card p-8">
             <FaUser className="w-16 h-16 text-emerald-600 mx-auto mb-6" />
             <h2 className="text-2xl font-bold text-card mb-4">
-              请连接钱包
-            </h2>
+            请连接钱包
+          </h2>
             <p className="text-muted">
               您需要连接钱包才能查看个人资料
             </p>
@@ -340,7 +340,7 @@ export default function ProfilePage() {
             </h2>
             <p className="text-muted mb-6">
               您需要先注册才能使用个人资料功能
-            </p>
+          </p>
             <Link href="/register" className="btn btn-primary">
               前往注册
             </Link>
@@ -423,7 +423,7 @@ export default function ProfilePage() {
               </div>
             </div>
             
-            <button
+              <button
               onClick={() => editing ? handleSaveProfile() : setEditing(true)}
               className="btn btn-primary btn-sm"
             >
@@ -438,9 +438,9 @@ export default function ProfilePage() {
                   编辑资料
                 </>
               )}
-            </button>
+              </button>
+            </div>
           </div>
-        </div>
 
         {/* 标签页导航 */}
         <div className="card mb-8">
@@ -497,7 +497,7 @@ export default function ProfilePage() {
                     </div>
                     <div className="icon-container">
                       <FaUsers className="w-6 h-6 text-white" />
-                    </div>
+                  </div>
                   </div>
                 </div>
 
@@ -511,7 +511,7 @@ export default function ProfilePage() {
                     </div>
                     <div className="icon-container">
                       <FaAward className="w-6 h-6 text-white" />
-                    </div>
+                  </div>
                   </div>
                 </div>
 
@@ -525,7 +525,7 @@ export default function ProfilePage() {
                     </div>
                     <div className="icon-container">
                       <FaEthereum className="w-6 h-6 text-white" />
-                    </div>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -552,7 +552,7 @@ export default function ProfilePage() {
                     <div className="text-sm text-gray-500">冻结保证金</div>
                   </div>
                   
-                  <div className="text-center">
+                    <div className="text-center">
                     <div className="text-2xl font-bold text-green-600 mb-1">
                       {Number(profile.availableDeposit || 0) / 1e18} ETH
                     </div>
@@ -597,11 +597,11 @@ export default function ProfilePage() {
                           <div className="flex items-center gap-3 mb-2">
                             <h4 className="font-semibold text-gray-900">
                               {caseInfo.complaintTitle}
-                            </h4>
+                      </h4>
                             <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
                               {getParticipationTypeText(caseInfo.participationType)}
-                            </span>
-                          </div>
+                          </span>
+                        </div>
                           
                           <p className="text-gray-600 text-sm mb-2 line-clamp-2">
                             {caseInfo.complaintDescription}
@@ -620,7 +620,7 @@ export default function ProfilePage() {
                                 惩罚: {Number(caseInfo.paidPenalty) / 1e18} ETH
                               </span>
                             )}
-                          </div>
+                        </div>
                         </div>
                         
                         <Link
@@ -651,13 +651,13 @@ export default function ProfilePage() {
                     <div key={activity.id} className="flex items-start gap-4 p-4 border border-gray-200 rounded-lg">
                       <div className="flex-shrink-0 mt-1">
                         {getActivityIcon(activity.activityType)}
-                      </div>
-                      
+                    </div>
+
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-1">
                           <h4 className="font-medium text-gray-900">
                             {activity.description}
-                          </h4>
+                      </h4>
                           <span className="text-xs text-gray-500">
                             {new Date(Number(activity.timestamp)).toLocaleString()}
                           </span>
@@ -699,17 +699,17 @@ export default function ProfilePage() {
                       </div>
                     </div>
                   ))}
-                </div>
+                  </div>
               ) : (
                 <p className="text-center text-gray-500 py-8">
                   暂无活动记录
                 </p>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
 
           {activeTab === 'settings' && (
-            <div className="space-y-6">
+              <div className="space-y-6">
               {/* 基本信息编辑 */}
               <div className="card p-6">
                 <h3 className="text-lg font-semibold text-card mb-4">基本信息</h3>
@@ -744,7 +744,7 @@ export default function ProfilePage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50"
                     />
                   </div>
-
+                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       <FaPhone className="w-4 h-4 inline mr-1" />
@@ -759,7 +759,7 @@ export default function ProfilePage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50"
                     />
                   </div>
-
+                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       <FaTwitter className="w-4 h-4 inline mr-1" />
@@ -837,16 +837,16 @@ export default function ProfilePage() {
                     <div>
                       <p className="font-medium text-gray-900">钱包地址</p>
                       <p className="text-sm text-gray-600 font-mono">{address}</p>
-                    </div>
+                      </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">链ID</p>
                       <p className="font-medium">{chainId}</p>
                     </div>
                   </div>
                 </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
       </div>
     </div>

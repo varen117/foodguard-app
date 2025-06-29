@@ -19,15 +19,15 @@ interface InputFieldProps {
 }
 
 export const InputField: React.FC<InputFieldProps> = ({
-  label,
-  value,
-  onChange,
+    label,
+    value,
+    onChange,
   type = "text",
-  placeholder,
-  required = false,
-  error,
-  helpText,
-  large = false,
+    placeholder,
+    required = false,
+    error,
+    helpText,
+    large = false,
   rows,
   disabled = false,
   className = ""
@@ -69,7 +69,7 @@ export const InputField: React.FC<InputFieldProps> = ({
           className={baseInputClass}
         />
       )}
-      
+
       {error && (
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       )}

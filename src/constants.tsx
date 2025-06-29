@@ -30,278 +30,62 @@
  * - TODO: 混合数据查询 - 需要合约+数据库的复合查询
  */
 
-// 合约地址映射 (chainId => contract addresses)
-export const chainsToFoodGuard: { [key: number]: { [key: string]: string } } = {
+/**
+ * FoodGuard 系统常量配置
+ */
+
+// 合约地址配置
+export const chainsToFoodGuard: Record<number, { 
+  foodSafetyGovernance: string;
+  participantPoolManager: string;
+  fundManager: string;
+  votingDisputeManager: string;
+  rewardPunishmentManager: string;
+}> = {
   31337: {
-    foodSafetyGovernance: "0x5fbdb2315678afecb367f032d93f642f64180aa3", // Anvil local
-    fundManager: "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
-    votingManager: "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0",
-    disputeManager: "0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9",
-    rewardManager: "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9"
+    foodSafetyGovernance: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9", // Anvil 本地网络 - FoodSafetyGovernance
+    participantPoolManager: "0x5FbDB2315678afecb367f032d93F642f64180aa3", // ParticipantPoolManager
+    fundManager: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0", // FundManager  
+    votingDisputeManager: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // VotingDisputeManager
+    rewardPunishmentManager: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9", // RewardPunishmentManager
   },
   // 可以添加其他网络的合约地址
 };
 
-// 食品安全治理主合约 ABI
-export const foodSafetyGovernanceAbi = [
-  // TODO: 合约接口 - 用户注册相关
-  {
-    inputs: [],
-    name: "registerUser",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function"
-  },
-  {
-    inputs: [],
-    name: "registerEnterprise", 
-    outputs: [],
-    stateMutability: "payable",
-    type: "function"
-  },
-  {
-    inputs: [],
-    name: "registerDaoMember",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function"
-  },
-  // 创建投诉
-  {
-    inputs: [
-      { name: "enterprise", type: "address" },
-      { name: "complaintTitle", type: "string" },
-      { name: "complaintDescription", type: "string" },
-      { name: "location", type: "string" },
-      { name: "incidentTime", type: "uint256" },
-      { name: "evidenceHashes", type: "string[]" },
-      { name: "riskLevel", type: "uint8" }
-    ],
-    name: "createComplaint",
-    outputs: [{ name: "caseId", type: "uint256" }],
-    stateMutability: "payable",
-    type: "function"
-  },
-  // 查询函数
-  {
-    inputs: [{ name: "caseId", type: "uint256" }],
-    name: "getCaseInfo",
-    outputs: [
-      {
-        components: [
-          { name: "caseId", type: "uint256" },
-          { name: "complainant", type: "address" },
-          { name: "enterprise", type: "address" },
-          { name: "complaintTitle", type: "string" },
-          { name: "complaintDescription", type: "string" },
-          { name: "location", type: "string" },
-          { name: "incidentTime", type: "uint256" },
-          { name: "complaintTime", type: "uint256" },
-          { name: "status", type: "uint8" },
-          { name: "riskLevel", type: "uint8" },
-          { name: "complaintUpheld", type: "bool" },
-          { name: "complainantDeposit", type: "uint256" },
-          { name: "enterpriseDeposit", type: "uint256" },
-          { name: "isCompleted", type: "bool" },
-          { name: "completionTime", type: "uint256" }
-        ],
-        name: "",
-        type: "tuple"
-      }
-    ],
-    stateMutability: "view",
-    type: "function"
-  },
-  {
-    inputs: [],
-    name: "getTotalCases",
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function"
-  },
-  {
-    inputs: [{ name: "user", type: "address" }],
-    name: "isUserRegistered",
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "view",
-    type: "function"
-  },
-  {
-    inputs: [{ name: "user", type: "address" }],
-    name: "checkIsEnterprise",
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "view",
-    type: "function"
-  },
-  // 投票和质疑相关
-  {
-    inputs: [{ name: "caseId", type: "uint256" }],
-    name: "endVotingAndStartChallenge",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function"
-  },
-  {
-    inputs: [{ name: "caseId", type: "uint256" }],
-    name: "endChallengeAndProcessRewards",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function"
-  },
-  // 事件
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: "caseId", type: "uint256" },
-      { indexed: true, name: "complainant", type: "address" },
-      { indexed: true, name: "enterprise", type: "address" },
-      { indexed: false, name: "title", type: "string" },
-      { indexed: false, name: "riskLevel", type: "uint8" },
-      { indexed: false, name: "timestamp", type: "uint256" }
-    ],
-    name: "ComplaintCreated",
-    type: "event"
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: "user", type: "address" },
-      { indexed: false, name: "isEnterprise", type: "bool" },
-      { indexed: false, name: "depositAmount", type: "uint256" },
-      { indexed: false, name: "timestamp", type: "uint256" }
-    ],
-    name: "UserRegistered",
-    type: "event"
-  },
-  {
-    inputs: [],
-    name: "registerDaoMember",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function"
-  }
-] as const;
-
-// 投票管理合约 ABI (简化版)
-export const votingManagerAbi = [
-  {
-    inputs: [
-      { name: "caseId", type: "uint256" },
-      { name: "choice", type: "uint8" },
-      { name: "reason", type: "string" },
-      { name: "evidenceHashes", type: "string[]" },
-      { name: "evidenceTypes", type: "string[]" },
-      { name: "evidenceDescriptions", type: "string[]" }
-    ],
-    name: "submitVote",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function"
-  },
-  {
-    inputs: [{ name: "caseId", type: "uint256" }],
-    name: "getVotingSessionInfo",
-    outputs: [
-      { name: "isActive", type: "bool" },
-      { name: "validators", type: "address[]" },
-      { name: "deadline", type: "uint256" },
-      { name: "supportVotes", type: "uint256" },
-      { name: "rejectVotes", type: "uint256" },
-      { name: "totalValidators", type: "uint256" },
-      { name: "votedValidators", type: "uint256" },
-      { name: "minValidators", type: "uint256" },
-      { name: "isCompleted", type: "bool" },
-      { name: "result", type: "bool" }
-    ],
-    stateMutability: "view",
-    type: "function"
-  }
-] as const;
-
-// 质疑管理合约 ABI (简化版)
-export const disputeManagerAbi = [
-  {
-    inputs: [
-      { name: "caseId", type: "uint256" },
-      { name: "targetValidator", type: "address" },
-      { name: "choice", type: "uint8" },
-      { name: "reason", type: "string" },
-      { name: "evidenceHashes", type: "string[]" },
-      { name: "evidenceTypes", type: "string[]" },
-      { name: "evidenceDescriptions", type: "string[]" }
-    ],
-    name: "submitChallenge",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function"
-  }
-] as const;
-
-// 资金管理合约 ABI (简化版)
-export const fundManagerAbi = [
-  {
-    inputs: [{ name: "user", type: "address" }],
-    name: "getAvailableDeposit",
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function"
-  },
-  {
-    inputs: [],
-    name: "getSystemConfig",
-    outputs: [
-      {
-        components: [
-          { name: "minComplaintDeposit", type: "uint256" },
-          { name: "maxComplaintDeposit", type: "uint256" },
-          { name: "minEnterpriseDeposit", type: "uint256" },
-          { name: "maxEnterpriseDeposit", type: "uint256" },
-          { name: "minDaoDeposit", type: "uint256" },
-          { name: "maxDaoDeposit", type: "uint256" },
-          { name: "votingPeriod", type: "uint256" },
-          { name: "challengePeriod", type: "uint256" },
-          { name: "minValidators", type: "uint256" },
-          { name: "maxValidators", type: "uint256" },
-          { name: "rewardPoolPercentage", type: "uint256" },
-          { name: "operationalFeePercentage", type: "uint256" }
-        ],
-        name: "",
-        type: "tuple"
-      }
-    ],
-    stateMutability: "view",
-    type: "function"
-  }
-] as const;
-
-// 数据类型定义
+// 业务枚举定义（与合约保持一致）
 export enum CaseStatus {
-  PENDING = 0,
-  DEPOSIT_LOCKED = 1,
-  VOTING = 2,
-  CHALLENGING = 3,
-  REWARD_PUNISHMENT = 4,
-  COMPLETED = 5,
-  CANCELLED = 6
+  PENDING = 0,            // 待处理
+  DEPOSIT_LOCKED = 1,     // 保证金已锁定
+  VOTING = 2,             // 投票中
+  CHALLENGING = 3,        // 质疑中
+  REWARD_PUNISHMENT = 4,  // 奖惩阶段
+  COMPLETED = 5,          // 已完成
+  CANCELLED = 6           // 已取消
 }
 
 export enum RiskLevel {
-  LOW = 0,
-  MEDIUM = 1,
-  HIGH = 2
+  LOW = 0,      // 低风险
+  MEDIUM = 1,   // 中风险
+  HIGH = 2      // 高风险
 }
 
 export enum VoteChoice {
-  SUPPORT_COMPLAINT = 0,
-  REJECT_COMPLAINT = 1
+  SUPPORT_COMPLAINT = 0,  // 支持投诉
+  REJECT_COMPLAINT = 1    // 反对投诉
 }
 
 export enum ChallengeChoice {
-  SUPPORT_VALIDATOR = 0,
-  OPPOSE_VALIDATOR = 1
+  SUPPORT_VALIDATOR = 0,  // 支持验证者
+  OPPOSE_VALIDATOR = 1    // 反对验证者
 }
 
-// 案件信息类型
+export enum UserRole {
+  COMPLAINANT = 0,    // 投诉者
+  ENTERPRISE = 1,     // 企业
+  DAO_MEMBER = 2      // DAO成员
+}
+
+// 案件信息接口
 export interface CaseInfo {
   caseId: bigint;
   complainant: string;
@@ -316,36 +100,375 @@ export interface CaseInfo {
   complaintUpheld: boolean;
   complainantDeposit: bigint;
   enterpriseDeposit: bigint;
+  complainantEvidenceHash: string;
   isCompleted: boolean;
   completionTime: bigint;
 }
 
-// 投票会话信息类型
-export interface VotingSessionInfo {
-  isActive: boolean;
-  validators: string[];
-  deadline: bigint;
-  supportVotes: bigint;
-  rejectVotes: bigint;
-  totalValidators: bigint;
-  votedValidators: bigint;
-  minValidators: bigint;
-  isCompleted: boolean;
-  result: boolean;
-}
+// FoodSafetyGovernance 合约 ABI
+export const foodSafetyGovernanceAbi = [
+  // 主要函数
+  {
+    "type": "function",
+    "name": "createComplaint",
+    "inputs": [
+      {"name": "enterprise", "type": "address"},
+      {"name": "complaintTitle", "type": "string"},
+      {"name": "complaintDescription", "type": "string"},
+      {"name": "location", "type": "string"},
+      {"name": "incidentTime", "type": "uint256"},
+      {"name": "evidenceHash", "type": "string"},
+      {"name": "riskLevel", "type": "uint8"}
+    ],
+    "outputs": [{"name": "caseId", "type": "uint256"}],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "endVotingAndStartChallenge",
+    "inputs": [{"name": "caseId", "type": "uint256"}],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "endChallengeAndProcessRewards",
+    "inputs": [{"name": "caseId", "type": "uint256"}],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  
+  // 查询函数
+  {
+    "type": "function",
+    "name": "getCaseInfo",
+    "inputs": [{"name": "caseId", "type": "uint256"}],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "components": [
+          {"name": "caseId", "type": "uint256"},
+          {"name": "complainant", "type": "address"},
+          {"name": "enterprise", "type": "address"},
+          {"name": "complaintTitle", "type": "string"},
+          {"name": "complaintDescription", "type": "string"},
+          {"name": "location", "type": "string"},
+          {"name": "incidentTime", "type": "uint256"},
+          {"name": "complaintTime", "type": "uint256"},
+          {"name": "status", "type": "uint8"},
+          {"name": "riskLevel", "type": "uint8"},
+          {"name": "complaintUpheld", "type": "bool"},
+          {"name": "complainantDeposit", "type": "uint256"},
+          {"name": "enterpriseDeposit", "type": "uint256"},
+          {"name": "complainantEvidenceHash", "type": "string"},
+          {"name": "isCompleted", "type": "bool"},
+          {"name": "completionTime", "type": "uint256"}
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getTotalCases",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getActiveCases",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "uint256[]"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getActiveCaseInfos",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "activeCaseInfos",
+        "type": "tuple[]",
+        "components": [
+          {"name": "caseId", "type": "uint256"},
+          {"name": "complainant", "type": "address"},
+          {"name": "enterprise", "type": "address"},
+          {"name": "complaintTitle", "type": "string"},
+          {"name": "complaintDescription", "type": "string"},
+          {"name": "location", "type": "string"},
+          {"name": "incidentTime", "type": "uint256"},
+          {"name": "complaintTime", "type": "uint256"},
+          {"name": "status", "type": "uint8"},
+          {"name": "riskLevel", "type": "uint8"},
+          {"name": "complaintUpheld", "type": "bool"},
+          {"name": "complainantDeposit", "type": "uint256"},
+          {"name": "enterpriseDeposit", "type": "uint256"},
+          {"name": "complainantEvidenceHash", "type": "string"},
+          {"name": "isCompleted", "type": "bool"},
+          {"name": "completionTime", "type": "uint256"}
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  
+  // 事件定义
+  {
+    "type": "event",
+    "name": "ComplaintCreated",
+    "inputs": [
+      {"name": "caseId", "type": "uint256", "indexed": true},
+      {"name": "complainant", "type": "address", "indexed": true},
+      {"name": "enterprise", "type": "address", "indexed": true},
+      {"name": "complaintTitle", "type": "string", "indexed": false},
+      {"name": "riskLevel", "type": "uint8", "indexed": false},
+      {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
+  },
+  {
+    "type": "event",
+    "name": "CaseStatusUpdated",
+    "inputs": [
+      {"name": "caseId", "type": "uint256", "indexed": true},
+      {"name": "oldStatus", "type": "uint8", "indexed": false},
+      {"name": "newStatus", "type": "uint8", "indexed": false},
+      {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
+  },
+  {
+    "type": "event",
+    "name": "CaseCompleted",
+    "inputs": [
+      {"name": "caseId", "type": "uint256", "indexed": true},
+      {"name": "complaintUpheld", "type": "bool", "indexed": false},
+      {"name": "totalReward", "type": "uint256", "indexed": false},
+      {"name": "totalPunishment", "type": "uint256", "indexed": false},
+      {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
+  }
+] as const;
 
-// 系统配置类型
-export interface SystemConfig {
-  minComplaintDeposit: bigint;
-  maxComplaintDeposit: bigint;
-  minEnterpriseDeposit: bigint;
-  maxEnterpriseDeposit: bigint;
-  minDaoDeposit: bigint;
-  maxDaoDeposit: bigint;
-  votingPeriod: bigint;
-  challengePeriod: bigint;
-  minValidators: bigint;
-  maxValidators: bigint;
-  rewardPoolPercentage: bigint;
-  operationalFeePercentage: bigint;
-} 
+// ParticipantPoolManager 合约 ABI（用户注册相关）
+export const participantPoolManagerAbi = [
+  {
+    "type": "function",
+    "name": "register",
+    "inputs": [{"name": "isEnterprise", "type": "bool"}],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "isUserRegistered",
+    "inputs": [{"name": "user", "type": "address"}],
+    "outputs": [{"name": "", "type": "bool"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getUserInfo",
+    "inputs": [{"name": "user", "type": "address"}],
+    "outputs": [
+      {"name": "isRegistered", "type": "bool"},
+      {"name": "role", "type": "uint8"},
+      {"name": "isActive", "type": "bool"},
+      {"name": "lastActiveTime", "type": "uint256"}
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "UserRegistered",
+    "inputs": [
+      {"name": "user", "type": "address", "indexed": true},
+      {"name": "isEnterprise", "type": "bool", "indexed": false},
+      {"name": "depositAmount", "type": "uint256", "indexed": false},
+      {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
+  }
+] as const;
+
+// VotingDisputeManager 合约 ABI（投票和质疑相关）
+export const votingDisputeManagerAbi = [
+  {
+    "type": "function",
+    "name": "submitVote",
+    "inputs": [
+      {"name": "caseId", "type": "uint256"},
+      {"name": "choice", "type": "uint8"},
+      {"name": "reason", "type": "string"},
+      {"name": "evidenceHash", "type": "string"}
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "submitChallenge",
+    "inputs": [
+      {"name": "caseId", "type": "uint256"},
+      {"name": "targetValidator", "type": "address"},
+      {"name": "choice", "type": "uint8"},
+      {"name": "reason", "type": "string"},
+      {"name": "evidenceHash", "type": "string"}
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "getVotingSessionInfo",
+    "inputs": [{"name": "caseId", "type": "uint256"}],
+    "outputs": [
+      {"name": "startTime", "type": "uint256"},
+      {"name": "endTime", "type": "uint256"},
+      {"name": "supportVotes", "type": "uint256"},
+      {"name": "rejectVotes", "type": "uint256"},
+      {"name": "totalVotes", "type": "uint256"},
+      {"name": "isActive", "type": "bool"},
+      {"name": "isCompleted", "type": "bool"}
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hasUserVoted",
+    "inputs": [
+      {"name": "caseId", "type": "uint256"},
+      {"name": "voter", "type": "address"}
+    ],
+    "outputs": [{"name": "", "type": "bool"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isUserSelectedValidator",
+    "inputs": [
+      {"name": "caseId", "type": "uint256"},
+      {"name": "user", "type": "address"}
+    ],
+    "outputs": [{"name": "", "type": "bool"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "VoteSubmitted",
+    "inputs": [
+      {"name": "caseId", "type": "uint256", "indexed": true},
+      {"name": "voter", "type": "address", "indexed": true},
+      {"name": "choice", "type": "uint8", "indexed": false},
+      {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
+  },
+  {
+    "type": "event",
+    "name": "ChallengeSubmitted",
+    "inputs": [
+      {"name": "caseId", "type": "uint256", "indexed": true},
+      {"name": "challenger", "type": "address", "indexed": true},
+      {"name": "targetValidator", "type": "address", "indexed": true},
+      {"name": "choice", "type": "uint8", "indexed": false},
+      {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
+  }
+] as const;
+
+// FundManager 合约 ABI（资金管理相关）
+export const fundManagerAbi = [
+  {
+    "type": "function",
+    "name": "getAvailableDeposit",
+    "inputs": [{"name": "user", "type": "address"}],
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getTotalDeposit",
+    "inputs": [{"name": "user", "type": "address"}],
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getFrozenDeposit",
+    "inputs": [{"name": "user", "type": "address"}],
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getSystemConfig",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "components": [
+          {"name": "minComplaintDeposit", "type": "uint256"},
+          {"name": "minEnterpriseDeposit", "type": "uint256"},
+          {"name": "minDaoDeposit", "type": "uint256"},
+          {"name": "votingPeriod", "type": "uint256"},
+          {"name": "challengePeriod", "type": "uint256"},
+          {"name": "minValidators", "type": "uint256"},
+          {"name": "maxValidators", "type": "uint256"},
+          {"name": "rewardPoolPercentage", "type": "uint256"},
+          {"name": "operationalFeePercentage", "type": "uint256"}
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  }
+] as const;
+
+// 状态文本映射
+export const getStatusText = (status: CaseStatus): string => {
+  switch (status) {
+    case CaseStatus.PENDING: return "等待处理";
+    case CaseStatus.DEPOSIT_LOCKED: return "保证金锁定";
+    case CaseStatus.VOTING: return "投票中";
+    case CaseStatus.CHALLENGING: return "质疑中";
+    case CaseStatus.REWARD_PUNISHMENT: return "奖惩处理";
+    case CaseStatus.COMPLETED: return "已完成";
+    case CaseStatus.CANCELLED: return "已取消";
+    default: return "未知状态";
+  }
+};
+
+export const getRiskLevelText = (riskLevel: RiskLevel): string => {
+  switch (riskLevel) {
+    case RiskLevel.LOW: return "低风险";
+    case RiskLevel.MEDIUM: return "中风险";
+    case RiskLevel.HIGH: return "高风险";
+    default: return "未知";
+  }
+};
+
+export const getRiskLevelColor = (riskLevel: RiskLevel): string => {
+  switch (riskLevel) {
+    case RiskLevel.LOW: return "text-green-500";
+    case RiskLevel.MEDIUM: return "text-yellow-500";
+    case RiskLevel.HIGH: return "text-red-500";
+    default: return "text-gray-500";
+  }
+};
+
+export const getStatusColor = (status: CaseStatus): string => {
+  switch (status) {
+    case CaseStatus.PENDING: return "bg-gray-100 text-gray-800";
+    case CaseStatus.DEPOSIT_LOCKED: return "bg-blue-100 text-blue-800";
+    case CaseStatus.VOTING: return "bg-yellow-100 text-yellow-800";
+    case CaseStatus.CHALLENGING: return "bg-orange-100 text-orange-800";
+    case CaseStatus.REWARD_PUNISHMENT: return "bg-purple-100 text-purple-800";
+    case CaseStatus.COMPLETED: return "bg-green-100 text-green-800";
+    case CaseStatus.CANCELLED: return "bg-red-100 text-red-800";
+    default: return "bg-gray-100 text-gray-800";
+  }
+};
+
+// 合约地址查找函数
+export const getContractAddresses = (chainId: number) => {
+  return chainsToFoodGuard[chainId] || null;
+}; 

@@ -10,7 +10,6 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json(result);
   } catch (error) {
-    console.error('GraphQL API error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -18,31 +17,53 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// 提取查询类型的辅助函数
+function extractQueryType(query: string): string {
+  if (query.includes('allComplaintCreateds')) return 'allComplaintCreateds';
+  if (query.includes('allCaseStatusUpdateds')) return 'allCaseStatusUpdateds';
+  if (query.includes('allVoteSubmitteds')) return 'allVoteSubmitteds';
+  if (query.includes('allRewardDistributeds')) return 'allRewardDistributeds';
+  if (query.includes('allUserRegistereds')) return 'allUserRegistereds';
+  return 'unknown';
+}
+
+// 获取结果记录数的辅助函数
+function getRecordCount(result: any): number {
+  if (result?.data) {
+    const dataKeys = Object.keys(result.data);
+    for (const key of dataKeys) {
+      if (result.data[key]?.nodes) {
+        return result.data[key].nodes.length;
+      }
+    }
+  }
+  return 0;
+}
+
 async function handleGraphQLQuery(query: string, variables?: any) {
-  // 简化的 GraphQL 解析器，根据查询类型返回对应数据
+  const queryType = extractQueryType(query);
   
-  if (query.includes('allComplaintCreateds')) {
-    return await getAllComplaintCreateds(variables);
+  try {
+    let result;
+    
+    if (query.includes('allComplaintCreateds')) {
+      result = await getAllComplaintCreateds(variables);
+    } else if (query.includes('allCaseStatusUpdateds')) {
+      result = await getAllCaseStatusUpdateds(variables);
+    } else if (query.includes('allVoteSubmitteds')) {
+      result = await getAllVoteSubmitteds(variables);
+    } else if (query.includes('allRewardDistributeds')) {
+      result = await getAllRewardDistributeds(variables);
+    } else if (query.includes('allUserRegistereds')) {
+      result = await getAllUserRegistereds(variables);
+    } else {
+      result = { data: {} };
+    }
+    
+    return result;
+  } catch (error) {
+    throw error;
   }
-  
-  if (query.includes('allCaseStatusUpdateds')) {
-    return await getAllCaseStatusUpdateds(variables);
-  }
-  
-  if (query.includes('allVoteSubmitteds')) {
-    return await getAllVoteSubmitteds(variables);
-  }
-  
-  if (query.includes('allRewardDistributeds')) {
-    return await getAllRewardDistributeds(variables);
-  }
-  
-  if (query.includes('allUserRegistereds')) {
-    return await getAllUserRegistereds(variables);
-  }
-  
-  // 默认返回空结果
-  return { data: {} };
 }
 
 // 获取所有投诉创建事件

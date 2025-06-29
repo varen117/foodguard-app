@@ -5,11 +5,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount, useChainId, useWriteContract, useReadContract } from "wagmi";
-import { parseEther } from "viem";
+import { useAccount, useChainId } from "wagmi";
 import { FaPlus, FaMinus, FaUpload, FaInfoCircle, FaExclamationTriangle, FaShieldAlt } from "react-icons/fa";
 import { InputField } from "@/components/ui/InputField";
-import { chainsToFoodGuard, foodSafetyGovernanceAbi, fundManagerAbi } from "@/constants";
+import { RiskLevel } from "@/constants";
+import { useUserRegistration, useCreateComplaint, useSystemConfig } from "@/hooks/useContractInteraction";
+import { Toaster, toast } from "react-hot-toast";
 
 interface Evidence {
   hash: string;
@@ -33,72 +34,42 @@ export default function ComplaintPage() {
     riskLevel: "0", // 默认低风险
   });
   
-  const [evidences, setEvidences] = useState<Evidence[]>([
-    { hash: "", type: "图片", description: "" }
-  ]);
-  
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [evidenceHash, setEvidenceHash] = useState("");
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
-  const contractAddress = chainsToFoodGuard[chainId]?.foodSafetyGovernance;
-  const fundManagerAddress = chainsToFoodGuard[chainId]?.fundManager;
-
-  const { writeContractAsync } = useWriteContract();
-
-  // 获取系统配置
-  const { data: systemConfig } = useReadContract({
-    abi: fundManagerAbi,
-    address: fundManagerAddress as `0x${string}`,
-    functionName: 'getSystemConfig',
-    query: {
-      enabled: !!fundManagerAddress,
-    },
-  });
-
-  // 获取用户注册状态
-  const { data: isUserRegistered = false } = useReadContract({
-    abi: foodSafetyGovernanceAbi,
-    address: contractAddress as `0x${string}`,
-    functionName: 'isUserRegistered',
-    args: address ? [address] : undefined,
-    query: {
-      enabled: !!contractAddress && !!address,
-    },
-  });
-
-  // 检查目标地址是否为企业
-  const { data: isTargetEnterprise = false } = useReadContract({
-    abi: foodSafetyGovernanceAbi,
-    address: contractAddress as `0x${string}`,
-    functionName: 'checkIsEnterprise',
-    args: formData.enterprise ? [formData.enterprise as `0x${string}`] : undefined,
-    query: {
-      enabled: !!contractAddress && !!formData.enterprise && formData.enterprise.length === 42,
-    },
-  });
+  // TODO: 合约接口 - 获取用户注册状态和信息
+  const { isRegistered: isUserRegistered, userInfo } = useUserRegistration();
+  
+  // TODO: 合约接口 - 获取系统配置信息
+  const systemConfig = useSystemConfig();
+  
+  // TODO: 合约接口 - 创建投诉功能
+  const { mutate: createComplaint, isPending: isSubmitting } = useCreateComplaint();
 
   useEffect(() => {
     // 检查用户注册状态，如果已连接钱包但未注册，直接跳转到注册页面
-    if (isConnected && contractAddress && isUserRegistered === false) {
+    if (isConnected && !isUserRegistered) {
       console.log('用户未注册，跳转到注册页面');
       router.push('/register');
     }
-  }, [isUserRegistered, isConnected, contractAddress, router]);
+  }, [isUserRegistered, isConnected, router, address]);
 
   useEffect(() => {
     // 设置默认保证金
     if (systemConfig) {
       setFormData(prev => ({
         ...prev,
-        depositAmount: systemConfig.minComplaintDeposit.toString()
+        depositAmount: systemConfig.minComplaintDeposit
       }));
     }
-  }, [systemConfig]);
+  }, [systemConfig, address]);
 
   const handleInputChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    
     setFormData(prev => ({
       ...prev,
-      [field]: e.target.value
+      [field]: value
     }));
     
     // 清除相关错误
@@ -110,21 +81,7 @@ export default function ComplaintPage() {
     }
   };
 
-  const addEvidence = () => {
-    setEvidences(prev => [...prev, { hash: "", type: "图片", description: "" }]);
-  };
-
-  const removeEvidence = (index: number) => {
-    if (evidences.length > 1) {
-      setEvidences(prev => prev.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateEvidence = (index: number, field: keyof Evidence, value: string) => {
-    setEvidences(prev => prev.map((evidence, i) => 
-      i === index ? { ...evidence, [field]: value } : evidence
-    ));
-  };
+  // 删除证据相关的函数，现在只使用单个证据哈希
 
   const validateForm = () => {
     const newErrors: { [key: string]: string } = {};
@@ -133,8 +90,6 @@ export default function ComplaintPage() {
       newErrors.enterprise = "请输入企业地址";
     } else if (formData.enterprise.length !== 42 || !formData.enterprise.startsWith('0x')) {
       newErrors.enterprise = "请输入有效的以太坊地址";
-    } else if (!isTargetEnterprise) {
-      newErrors.enterprise = "该地址不是已注册的企业";
     }
 
     if (!formData.complaintTitle.trim()) {
@@ -161,21 +116,22 @@ export default function ComplaintPage() {
     if (!formData.depositAmount) {
       newErrors.depositAmount = "请输入保证金金额";
     } else {
-      const depositBigInt = BigInt(formData.depositAmount);
-      const minDeposit = systemConfig?.minComplaintDeposit || 0n;
-      if (depositBigInt < minDeposit) {
-        newErrors.depositAmount = `保证金不能少于 ${minDeposit.toString()} Wei`;
+      const depositAmount = parseFloat(formData.depositAmount);
+      const minDeposit = systemConfig ? parseFloat(systemConfig.minComplaintDeposit) : 0;
+      if (depositAmount < minDeposit) {
+        newErrors.depositAmount = `保证金不能少于 ${minDeposit} ETH`;
       }
     }
 
     // 检查证据
-    const validEvidences = evidences.filter(e => e.hash.trim() && e.description.trim());
-    if (validEvidences.length === 0) {
-      newErrors.evidences = "至少需要提供一个有效证据";
+    if (!evidenceHash.trim()) {
+      newErrors.evidenceHash = "请提供证据哈希或存储链接";
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const isValid = Object.keys(newErrors).length === 0;
+
+    return isValid;
   };
 
   const handleSubmit = async () => {
@@ -183,45 +139,43 @@ export default function ComplaintPage() {
       return;
     }
 
-    if (!isConnected || !contractAddress) {
-      alert("请先连接钱包");
+    if (!isConnected) {
+      toast.error("请先连接钱包");
       return;
     }
 
-    try {
-      setIsSubmitting(true);
+    // TODO: 合约接口 - createComplaint() 创建投诉
+    const incidentTimestamp = Math.floor(new Date(formData.incidentTime).getTime() / 1000);
 
-      // 过滤有效证据
-      const validEvidences = evidences.filter(e => e.hash.trim() && e.description.trim());
-      
-      const evidenceHashes = validEvidences.map(e => e.hash);
+    const complaintData = {
+      enterprise: formData.enterprise,
+      complaintTitle: formData.complaintTitle,
+      complaintDescription: formData.complaintDescription,
+      location: formData.location,
+      incidentTime: incidentTimestamp,
+      evidenceHash: evidenceHash,
+      riskLevel: parseInt(formData.riskLevel) as RiskLevel,
+      depositAmount: formData.depositAmount,
+    };
 
-      const incidentTimestamp = Math.floor(new Date(formData.incidentTime).getTime() / 1000);
-
-      const result = await writeContractAsync({
-        abi: foodSafetyGovernanceAbi,
-        address: contractAddress as `0x${string}`,
-        functionName: 'createComplaint',
-        args: [
-          formData.enterprise as `0x${string}`,
-          formData.complaintTitle,
-          formData.complaintDescription,
-          formData.location,
-          BigInt(incidentTimestamp),
-          evidenceHashes,
-          parseInt(formData.riskLevel) as 0 | 1 | 2, // 转换为合约需要的 uint8
-        ],
-        value: BigInt(formData.depositAmount),
-      });
-
-      alert("投诉创建成功！");
-      router.push('/cases');
-    } catch (error) {
-      console.error('创建投诉失败:', error);
-      alert('创建投诉失败，请重试');
-    } finally {
-      setIsSubmitting(false);
-    }
+    createComplaint(
+      complaintData,
+      {
+        onSuccess: (hash) => {
+          console.log('投诉创建成功:', hash);
+          toast.success("投诉创建成功！");
+          
+          // 延迟跳转，让用户看到成功消息
+          setTimeout(() => {
+            router.push('/cases');
+          }, 2000);
+        },
+        onError: (error) => {
+          console.error('创建投诉失败:', error);
+          toast.error(`创建投诉失败: ${error.message}`);
+        }
+      }
+    );
   };
 
   if (!isConnected) {
@@ -288,7 +242,7 @@ export default function ComplaintPage() {
                   placeholder="0x..."
                   required
                   error={errors.enterprise}
-                  helpText={formData.enterprise && isTargetEnterprise ? "✓ 企业地址有效" : "请输入已注册的企业地址"}
+                  helpText="请输入被投诉企业的地址"
                 />
 
                 <InputField
@@ -353,140 +307,99 @@ export default function ComplaintPage() {
                 </div>
 
                 <InputField
-                  label="保证金金额 (Wei)"
+                  label="保证金金额 (ETH)"
+                  type="number"
                   value={formData.depositAmount}
                   onChange={handleInputChange('depositAmount')}
-                  placeholder={`最小金额: ${systemConfig?.minComplaintDeposit?.toString() || '0'} Wei`}
+                  placeholder="0.01"
+                  min={systemConfig?.minComplaintDeposit || "0.01"}
+                  step="0.001"
                   required
                   error={errors.depositAmount}
-                  helpText={`当前输入: ${formData.depositAmount ? Number(formData.depositAmount) / 1e18 : 0} ETH`}
+                  helpText={`最低保证金: ${systemConfig?.minComplaintDeposit || "0.01"} ETH`}
                 />
               </div>
 
-              {/* 右侧：证据材料 */}
+              {/* 右侧：证据上传 */}
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    证据材料
-                  </h3>
-                  <button
-                    onClick={addEvidence}
-                    className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors inline-flex items-center gap-2"
-                  >
-                    <FaPlus className="w-4 h-4" />
-                    添加证据
-                  </button>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  证据材料
+                </h3>
+
+                <div>
+                  <label className="form-label">
+                    证据哈希 / 存储链接 *
+                  </label>
+                  <textarea
+                    value={evidenceHash}
+                    onChange={(e) => setEvidenceHash(e.target.value)}
+                    placeholder="请输入证据的IPFS哈希、文件链接或其他存储标识..."
+                    className="form-input"
+                    rows={4}
+                    required
+                  />
+                  {errors.evidenceHash && (
+                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.evidenceHash}</p>
+                  )}
+                  <p className="text-sm text-muted mt-1">
+                    支持 IPFS 哈希、去中心化存储链接或其他可验证的证据标识
+                  </p>
                 </div>
 
-                {errors.evidences && (
-                  <p className="text-sm text-red-600 dark:text-red-400">{errors.evidences}</p>
-                )}
-
-                <div className="space-y-4">
-                  {evidences.map((evidence, index) => (
-                    <div key={index} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <h4 className="font-medium text-gray-900 dark:text-white">
-                          证据 #{index + 1}
-                        </h4>
-                        {evidences.length > 1 && (
-                          <button
-                            onClick={() => removeEvidence(index)}
-                            className="text-red-600 hover:text-red-700 transition-colors"
-                          >
-                            <FaMinus className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            证据类型
-                          </label>
-                          <select
-                            value={evidence.type}
-                            onChange={(e) => updateEvidence(index, 'type', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                          >
-                            <option value="图片">图片</option>
-                            <option value="视频">视频</option>
-                            <option value="文档">文档</option>
-                            <option value="音频">音频</option>
-                            <option value="其他">其他</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            IPFS哈希 / 存储链接
-                          </label>
-                          <input
-                            type="text"
-                            value={evidence.hash}
-                            onChange={(e) => updateEvidence(index, 'hash', e.target.value)}
-                            placeholder="QmXXXXXX... 或 https://..."
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            证据描述
-                          </label>
-                          <textarea
-                            value={evidence.description}
-                            onChange={(e) => updateEvidence(index, 'description', e.target.value)}
-                            placeholder="描述此证据的内容和重要性..."
-                            rows={3}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-vertical"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* 证据上传提示 */}
+                {/* 证据类型说明 */}
                 <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <FaUpload className="w-5 h-5 text-blue-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1">
-                        证据上传建议
-                      </h4>
-                      <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                        <li>• 建议使用IPFS进行去中心化存储</li>
-                        <li>• 可使用Pinata、NFT.Storage等服务</li>
-                        <li>• 确保证据文件可长期访问</li>
-                        <li>• 避免上传个人敏感信息</li>
-                      </ul>
-                    </div>
-                  </div>
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                    证据要求
+                  </h4>
+                  <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                    <li>• 照片：产品外观、标签、生产日期等</li>
+                    <li>• 文档：购买凭证、检验报告、医疗诊断等</li>
+                    <li>• 视频：问题展示、现场记录等</li>
+                    <li>• 其他：相关证明材料</li>
+                  </ul>
+                </div>
+
+                {/* 提交按钮 */}
+                <div className="pt-6">
+                  <button
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
+                    className="w-full btn btn-primary text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        提交中...
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2">
+                        <FaPlus className="w-5 h-5" />
+                        创建投诉
+                      </div>
+                    )}
+                  </button>
+                  
+                  <p className="text-xs text-muted text-center mt-2">
+                    点击创建投诉即表示您同意承担相应的法律责任
+                  </p>
                 </div>
               </div>
-            </div>
-
-            {/* 提交按钮 */}
-            <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="w-full bg-emerald-600 text-white py-4 px-6 rounded-lg font-semibold hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSubmitting ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    提交投诉中...
-                  </div>
-                ) : (
-                  "提交投诉"
-                )}
-              </button>
             </div>
           </div>
         </div>
       </div>
+      
+      {/* Toast 通知组件 */}
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#333',
+            color: '#fff',
+          },
+        }}
+      />
     </div>
   );
 } 

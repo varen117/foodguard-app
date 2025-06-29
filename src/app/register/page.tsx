@@ -5,68 +5,50 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAccount, useChainId, useWriteContract, useReadContract } from "wagmi";
-import { parseEther } from "viem";
+import { useAccount, useChainId } from "wagmi";
+import { formatEther } from "viem";
 import { FaUser, FaBuilding, FaShieldAlt, FaInfoCircle, FaUsers, FaRocket, FaWallet, FaTwitter, FaVoteYea } from "react-icons/fa";
-import { chainsToFoodGuard, foodSafetyGovernanceAbi, fundManagerAbi } from "@/constants";
+import { useUserRegistration, useUserRegister, useSystemConfig } from "@/hooks/useContractInteraction";
+import { Toaster, toast } from "react-hot-toast";
 
 export default function RegisterPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const [userType, setUserType] = useState<'user' | 'dao' | 'enterprise'>('user');
+  const [userType, setUserType] = useState<'complainant' | 'dao' | 'enterprise'>('complainant');
   const [depositAmount, setDepositAmount] = useState("");
   const [twitterId, setTwitterId] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const contractAddress = chainsToFoodGuard[chainId]?.foodSafetyGovernance;
-  const fundManagerAddress = chainsToFoodGuard[chainId]?.fundManager;
-
-  const { writeContractAsync } = useWriteContract();
-
-  // 获取系统配置
-  const { data: systemConfig } = useReadContract({
-    abi: fundManagerAbi,
-    address: fundManagerAddress as `0x${string}`,
-    functionName: 'getSystemConfig',
-    query: {
-      enabled: !!fundManagerAddress,
-    },
-  });
-
-  // 获取用户注册状态
-  const { data: isUserRegistered = false } = useReadContract({
-    abi: foodSafetyGovernanceAbi,
-    address: contractAddress as `0x${string}`,
-    functionName: 'isUserRegistered',
-    args: address ? [address] : undefined,
-    query: {
-      enabled: !!contractAddress && !!address,
-    },
-  });
+  // TODO: 合约接口 - 获取用户注册状态和信息
+  const { isRegistered: isUserRegistered, userInfo } = useUserRegistration();
+  
+  // TODO: 合约接口 - 获取系统配置信息
+  const systemConfig = useSystemConfig();
+  
+  // TODO: 合约接口 - 用户注册功能
+  const { mutate: registerUser, isPending: isSubmitting } = useUserRegister();
 
   useEffect(() => {
     // 从URL参数获取注册类型
     const type = searchParams.get('type');
-    if (type === 'enterprise' || type === 'user') {
-      setUserType(type);
+    if (type === 'enterprise' || type === 'user' || type === 'dao') {
+      setUserType(type === 'user' ? 'complainant' : type as 'enterprise' | 'dao');
     }
   }, [searchParams]);
 
   useEffect(() => {
-    // 只有在已连接钱包且确实已注册的情况下才跳转
-    // 增加额外检查确保这不是初始加载状态
-    if (isConnected && isUserRegistered === true && contractAddress) {
+    // 如果用户已注册，跳转到主页
+    if (isConnected && isUserRegistered) {
       console.log('用户已注册，跳转到主页');
       router.push('/');
     }
-  }, [isConnected, isUserRegistered, contractAddress, router]);
+  }, [isConnected, isUserRegistered, router]);
 
   useEffect(() => {
     // 设置默认保证金金额
     if (systemConfig) {
-      let minDeposit: bigint;
+      let minDeposit: string;
       
       if (userType === 'enterprise') {
         minDeposit = systemConfig.minEnterpriseDeposit;
@@ -77,88 +59,58 @@ export default function RegisterPage() {
         minDeposit = systemConfig.minComplaintDeposit;
       }
       
-      // 直接使用 minDeposit 值，因为它已经是 Wei 单位
-      setDepositAmount(minDeposit.toString());
-      console.log('设置默认保证金:', { userType, minDeposit: minDeposit.toString() });
+      setDepositAmount(minDeposit);
+      console.log('设置默认保证金:', { userType, minDeposit });
     }
   }, [systemConfig, userType]);
 
   const handleRegister = async () => {
-    if (!isConnected || !contractAddress) {
-      alert("请先连接钱包");
+    if (!isConnected) {
+      toast.error("请先连接钱包");
       return;
     }
 
     if (!depositAmount) {
-      alert("请输入保证金金额");
+      toast.error("请输入保证金金额");
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      console.log('开始注册:', { userType, depositAmount, contractAddress });
-
-      let functionName: 'registerUser' | 'registerEnterprise' | 'registerDaoMember';
-      
-      if (userType === 'enterprise') {
-        functionName = 'registerEnterprise';
-      } else if (userType === 'dao') {
-        functionName = 'registerDaoMember';
-      } else {
-        functionName = 'registerUser';
-      }
-      
-      const tx = await writeContractAsync({
-        abi: foodSafetyGovernanceAbi,
-        address: contractAddress as `0x${string}`,
-        functionName,
-        value: BigInt(depositAmount),
-      });
-
-      console.log('注册交易成功:', tx);
-      
-      // 如果提供了Twitter ID，存储绑定关系
-      if (twitterId.trim()) {
-        try {
-          const twitterBindings = JSON.parse(localStorage.getItem('twitterBindings') || '{}');
-          twitterBindings[address] = {
-            twitterId: twitterId.trim(),
-            userType,
-            bindTime: Date.now()
-          };
-          localStorage.setItem('twitterBindings', JSON.stringify(twitterBindings));
-          console.log('Twitter ID绑定成功:', { address, twitterId: twitterId.trim() });
-        } catch (error) {
-          console.error('Twitter ID绑定失败:', error);
+    // TODO: 合约接口 - register() 用户注册
+    registerUser({ userType, depositAmount }, {
+      onSuccess: (hash) => {
+        console.log('注册交易成功:', hash);
+        
+        // 如果提供了Twitter ID，存储绑定关系  
+        // TODO: 数据库操作 - 存储Twitter绑定关系
+        if (twitterId.trim() && address) {
+          try {
+            const twitterBindings = JSON.parse(localStorage.getItem('twitterBindings') || '{}');
+            twitterBindings[address] = {
+              twitterId: twitterId.trim(),
+              userType,
+              bindTime: Date.now()
+            };
+            localStorage.setItem('twitterBindings', JSON.stringify(twitterBindings));
+            console.log('Twitter ID绑定成功:', { address, twitterId: twitterId.trim() });
+            toast.success('Twitter账户已绑定');
+          } catch (error) {
+            console.error('Twitter ID绑定失败:', error);
+            toast.error('Twitter绑定失败');
+          }
         }
+        
+        toast.success(`${userType === 'enterprise' ? '企业' : userType === 'dao' ? 'DAO组织成员' : '普通用户'}注册成功！`);
+        
+        // 延迟跳转，让用户看到成功消息
+        setTimeout(() => {
+          router.push('/');
+        }, 2000);
+      },
+      onError: (error) => {
+        console.error('注册失败:', error);
+        toast.error(`注册失败: ${error.message}`);
       }
-      
-      const minDeposit = systemConfig 
-        ? (() => {
-            if (userType === 'enterprise') {
-              return systemConfig.minEnterpriseDeposit;
-            } else if (userType === 'dao') {
-              return systemConfig.minDaoDeposit;
-            } else {
-              return systemConfig.minComplaintDeposit;
-            }
-          })()
-        : 0n;
-
-      alert(`${userType === 'enterprise' ? '企业' : userType === 'dao' ? 'DAO组织成员' : '普通用户'}注册成功！${twitterId ? ' Twitter账户已绑定。' : ''}`);
-      
-      // 延迟跳转，让用户看到成功消息
-      setTimeout(() => {
-        router.push('/');
-      }, 1000);
-      
-    } catch (error) {
-      console.error('注册失败:', error);
-      const errorMessage = error instanceof Error ? error.message : '未知错误';
-      alert(`注册失败: ${errorMessage}`);
-    } finally {
-      setIsSubmitting(false);
-    }
+    });
   };
 
   if (!isConnected) {
@@ -298,16 +250,12 @@ export default function RegisterPage() {
   }
 
   const minDeposit = systemConfig 
-    ? (() => {
-        if (userType === 'enterprise') {
-          return systemConfig.minEnterpriseDeposit;
-        } else if (userType === 'dao') {
-          return systemConfig.minDaoDeposit;
-        } else {
-          return systemConfig.minComplaintDeposit;
-        }
-      })()
-    : 0n;
+    ? (userType === 'enterprise' 
+        ? systemConfig.minEnterpriseDeposit
+        : userType === 'dao' 
+          ? systemConfig.minDaoDeposit
+          : systemConfig.minComplaintDeposit)
+    : "0";
 
   return (
     <div className="main-container py-12">
@@ -334,21 +282,21 @@ export default function RegisterPage() {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <button
-                  onClick={() => setUserType('user')}
+                  onClick={() => setUserType('complainant')}
                   className={`p-6 rounded-lg border-2 transition-all ${
-                    userType === 'user'
+                    userType === 'complainant'
                       ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
                       : 'border-gray-200 dark:border-gray-600 hover:border-emerald-300'
                   }`}
                 >
                   <FaUser className={`w-8 h-8 mx-auto mb-3 ${
-                    userType === 'user' ? 'text-emerald-600' : 'text-gray-400'
+                    userType === 'complainant' ? 'text-emerald-600' : 'text-gray-400'
                   }`} />
                   <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                    普通用户
+                    投诉者
                   </h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    可以创建投诉、参与投票
+                    可以创建投诉、参与治理
                   </p>
                 </button>
 
@@ -460,7 +408,7 @@ export default function RegisterPage() {
                       }
                     </p>
                     <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
-                      最小保证金: {minDeposit ? Number(minDeposit) / 1e18 : 0} ETH
+                      最小保证金: {minDeposit ? parseFloat(minDeposit) : 0} ETH
                     </p>
                   </div>
                 </div>
@@ -468,18 +416,18 @@ export default function RegisterPage() {
 
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  保证金金额 (Wei)
+                  保证金金额 (ETH)
                   <span className="text-red-500 ml-1">*</span>
                 </label>
                 <input
                   type="text"
                   value={depositAmount}
                   onChange={(e) => setDepositAmount(e.target.value)}
-                  placeholder={`最小金额: ${minDeposit ? minDeposit.toString() : '0'} Wei`}
+                  placeholder={`最小金额: ${minDeposit ? minDeposit : '0'} ETH`}
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  当前输入: {depositAmount ? Number(depositAmount) / 1e18 : 0} ETH
+                  当前输入: {depositAmount ? parseFloat(depositAmount) : 0} ETH
                 </p>
               </div>
             </div>
@@ -496,7 +444,7 @@ export default function RegisterPage() {
                   注册中...
                 </div>
               ) : (
-                `注册为${userType === 'enterprise' ? '企业' : userType === 'dao' ? 'DAO组织成员' : '普通用户'}`
+                `注册为${userType === 'enterprise' ? '企业' : userType === 'dao' ? 'DAO组织成员' : '投诉者'}`
               )}
             </button>
 
@@ -514,6 +462,18 @@ export default function RegisterPage() {
             </div>
           </div>
         </div>
+        
+        {/* Toast 通知组件 */}
+        <Toaster 
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#333',
+              color: '#fff',
+            },
+          }}
+        />
       </div>
     </div>
   );
