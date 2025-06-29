@@ -3,7 +3,7 @@
  */
 "use client"
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAccount } from "wagmi";
 import { ReactNode } from "react";
@@ -21,14 +21,17 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   // 允许访问的公共路径（无需钱包连接）
   const publicPaths = ['/register'];
 
-  useEffect(() => {
-    // 只有在不是连接中且未连接钱包且当前不在公共路径时才跳转
+  const handleRedirect = useCallback(() => {
     if (!isConnecting && !isConnected && !publicPaths.includes(pathname)) {
       setIsRedirecting(true);
       router.push('/register');
     }
+  }, [isConnecting, isConnected, pathname, router]);
+
+  useEffect(() => {
+    handleRedirect();
     // 移除自动跳转逻辑，让已连接钱包的用户能够访问注册页面
-  }, [isConnected, isConnecting, pathname, router]);
+  }, [handleRedirect]);
 
   // 显示加载状态的条件：
   // 1. 正在连接钱包

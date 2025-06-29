@@ -3,7 +3,7 @@
  */
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useAccount, useChainId } from "wagmi";
 import { FaShieldAlt, FaHome, FaPlus, FaEye, FaUsers, FaGavel, FaChartLine, FaVoteYea } from "react-icons/fa";
@@ -24,13 +24,23 @@ export default function HomePage() {
   // TODO: 合约接口 - 获取案件总数
   const totalCases = useTotalCases();
 
-  // 统计数据计算
-  const activeCasesCount = recentCases.filter(c => 
-    [CaseStatus.PENDING, CaseStatus.DEPOSIT_LOCKED, CaseStatus.VOTING, CaseStatus.CHALLENGING].includes(c.status)
-  ).length;
-  
-  const completedCasesCount = recentCases.filter(c => c.status === CaseStatus.COMPLETED).length;
-  const highRiskCasesCount = recentCases.filter(c => c.riskLevel === RiskLevel.HIGH).length;
+
+
+  // 使用 useMemo 优化统计数据计算
+  const { activeCasesCount, completedCasesCount, highRiskCasesCount } = useMemo(() => {
+    const active = recentCases.filter(c => 
+      [CaseStatus.PENDING, CaseStatus.DEPOSIT_LOCKED, CaseStatus.VOTING, CaseStatus.CHALLENGING].includes(c.status)
+    ).length;
+    
+    const completed = recentCases.filter(c => c.status === CaseStatus.COMPLETED).length;
+    const highRisk = recentCases.filter(c => c.riskLevel === RiskLevel.HIGH).length;
+
+    return {
+      activeCasesCount: active,
+      completedCasesCount: completed,
+      highRiskCasesCount: highRisk
+    };
+  }, [recentCases]);
 
   return (
     <div className="main-container">

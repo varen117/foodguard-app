@@ -3,7 +3,7 @@
  */
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useAccount, useChainId } from "wagmi";
 import { FaSearch, FaFilter, FaEye, FaGavel, FaClock, FaCheckCircle, FaExclamationTriangle } from "react-icons/fa";
@@ -22,9 +22,7 @@ interface FilterOptions {
 export default function CasesPage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const [filteredCases, setFilteredCases] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const casesPerPage = 10;
 
   const [filters, setFilters] = useState<FilterOptions>({
@@ -48,8 +46,8 @@ export default function CasesPage() {
     }
   }, [address]);
 
-  // 应用筛选
-  useEffect(() => {
+  // 使用 useMemo 优化筛选逻辑，避免无限循环
+  const filteredCases = useMemo(() => {
     let filtered = [...cases];
 
     // 状态筛选
@@ -102,10 +100,18 @@ export default function CasesPage() {
       );
     }
 
-    setFilteredCases(filtered);
-    setTotalPages(Math.ceil(filtered.length / casesPerPage));
+    return filtered;
+  }, [cases, filters.status, filters.riskLevel, filters.dateRange, filters.searchKeyword]);
+
+  // 计算总页数
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredCases.length / casesPerPage);
+  }, [filteredCases.length, casesPerPage]);
+
+  // 当筛选条件改变时重置到第一页
+  useEffect(() => {
     setCurrentPage(1);
-  }, [cases, filters]);
+  }, [filters.status, filters.riskLevel, filters.dateRange, filters.searchKeyword]);
 
   const getCurrentPageCases = () => {
     const startIndex = (currentPage - 1) * casesPerPage;

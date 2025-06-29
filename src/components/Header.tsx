@@ -5,20 +5,20 @@ import { FaShieldAlt, FaHome, FaPlus, FaList, FaUser } from "react-icons/fa";
 import { useAccount, useChainId, useReadContract } from "wagmi";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { chainsToFoodGuard, foodSafetyGovernanceAbi } from "@/constants";
+import { chainsToFoodGuard, participantPoolManagerAbi } from "@/constants";
 
 export default function Header() {
     const { address, isConnected } = useAccount();
     const chainId = useChainId();
     const router = useRouter();
 
-    const contractAddress = chainsToFoodGuard[chainId]?.foodSafetyGovernance;
+    const contractAddress = chainsToFoodGuard[chainId]?.participantPoolManager;
 
     // 获取用户注册状态
     const { data: isUserRegistered = false } = useReadContract({
-        abi: foodSafetyGovernanceAbi,
+        abi: participantPoolManagerAbi,
         address: contractAddress as `0x${string}`,
-        functionName: 'isUserRegistered',
+        functionName: 'isRegistered',
         args: address ? [address] : undefined,
         query: {
             enabled: !!contractAddress && !!address,

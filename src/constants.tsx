@@ -14,7 +14,6 @@
  *    - 用户详细资料（姓名、联系方式、头像等）
  *    - 证据文件详情和元数据
  *    - 用户操作日志和活动记录
- *    - Twitter 绑定信息
  *    - 通知消息和提醒
  *    - 缓存数据用于提升性能
  * 
@@ -44,10 +43,10 @@ export const chainsToFoodGuard: Record<number, {
 }> = {
   31337: {
     foodSafetyGovernance: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9", // Anvil 本地网络 - FoodSafetyGovernance
-    participantPoolManager: "0x5FbDB2315678afecb367f032d93F642f64180aa3", // ParticipantPoolManager
-    fundManager: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0", // FundManager  
-    votingDisputeManager: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // VotingDisputeManager
-    rewardPunishmentManager: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9", // RewardPunishmentManager
+    participantPoolManager: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // ParticipantPoolManager
+    fundManager: "0x5FbDB2315678afecb367f032d93F642f64180aa3", // FundManager  
+    votingDisputeManager: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9", // VotingDisputeManager
+    rewardPunishmentManager: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0", // RewardPunishmentManager
   },
   // 可以添加其他网络的合约地址
 };
@@ -105,9 +104,20 @@ export interface CaseInfo {
   completionTime: bigint;
 }
 
-// FoodSafetyGovernance 合约 ABI
+// FoodSafetyGovernance 合约 ABI（核心功能）
 export const foodSafetyGovernanceAbi = [
-  // 主要函数
+  // 用户注册函数
+  {
+    "type": "function",
+    "name": "registerUser",
+    "inputs": [
+      {"name": "user", "type": "address"},
+      {"name": "userRole", "type": "uint8"}
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  // 创建投诉
   {
     "type": "function",
     "name": "createComplaint",
@@ -123,21 +133,6 @@ export const foodSafetyGovernanceAbi = [
     "outputs": [{"name": "caseId", "type": "uint256"}],
     "stateMutability": "payable"
   },
-  {
-    "type": "function",
-    "name": "endVotingAndStartChallenge",
-    "inputs": [{"name": "caseId", "type": "uint256"}],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "endChallengeAndProcessRewards",
-    "inputs": [{"name": "caseId", "type": "uint256"}],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  
   // 查询函数
   {
     "type": "function",
@@ -213,7 +208,6 @@ export const foodSafetyGovernanceAbi = [
     ],
     "stateMutability": "view"
   },
-  
   // 事件定义
   {
     "type": "event",
@@ -250,22 +244,17 @@ export const foodSafetyGovernanceAbi = [
   }
 ] as const;
 
-// ParticipantPoolManager 合约 ABI（用户注册相关）
+// ParticipantPoolManager 合约 ABI（用户池管理）
 export const participantPoolManagerAbi = [
+  // 查询用户注册状态
   {
     "type": "function",
-    "name": "register",
-    "inputs": [{"name": "isEnterprise", "type": "bool"}],
-    "outputs": [],
-    "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "isUserRegistered",
+    "name": "isRegistered",
     "inputs": [{"name": "user", "type": "address"}],
     "outputs": [{"name": "", "type": "bool"}],
     "stateMutability": "view"
   },
+  // 获取用户信息
   {
     "type": "function",
     "name": "getUserInfo",
@@ -278,20 +267,73 @@ export const participantPoolManagerAbi = [
     ],
     "stateMutability": "view"
   },
+  // 检查是否可以参与案件
+  {
+    "type": "function",
+    "name": "canParticipateInCase",
+    "inputs": [
+      {"name": "user", "type": "address"},
+      {"name": "caseId", "type": "uint256"}
+    ],
+    "outputs": [{"name": "", "type": "bool"}],
+    "stateMutability": "view"
+  },
+  // 获取角色池大小
+  {
+    "type": "function",
+    "name": "getRolePoolSize",
+    "inputs": [{"name": "role", "type": "uint8"}],
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view"
+  },
+  // 获取总用户数
+  {
+    "type": "function",
+    "name": "getTotalUsers",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view"
+  },
+  // 获取用户在特定案件中的参与状态
+  {
+    "type": "function",
+    "name": "getUserCaseParticipation",
+    "inputs": [
+      {"name": "user", "type": "address"},
+      {"name": "caseId", "type": "uint256"}
+    ],
+    "outputs": [
+      {"name": "isParticipating", "type": "bool"},
+      {"name": "role", "type": "uint8"},
+      {"name": "participationTime", "type": "uint256"}
+    ],
+    "stateMutability": "view"
+  },
+  // 事件定义
   {
     "type": "event",
     "name": "UserRegistered",
     "inputs": [
       {"name": "user", "type": "address", "indexed": true},
-      {"name": "isEnterprise", "type": "bool", "indexed": false},
-      {"name": "depositAmount", "type": "uint256", "indexed": false},
+      {"name": "role", "type": "uint8", "indexed": false},
+      {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
+  },
+  {
+    "type": "event",
+    "name": "UserRoleUpdated",
+    "inputs": [
+      {"name": "user", "type": "address", "indexed": true},
+      {"name": "oldRole", "type": "uint8", "indexed": false},
+      {"name": "newRole", "type": "uint8", "indexed": false},
       {"name": "timestamp", "type": "uint256", "indexed": false}
     ]
   }
 ] as const;
 
-// VotingDisputeManager 合约 ABI（投票和质疑相关）
+// VotingDisputeManager 合约 ABI（投票和质疑功能）
 export const votingDisputeManagerAbi = [
+  // 投票功能
   {
     "type": "function",
     "name": "submitVote",
@@ -304,19 +346,20 @@ export const votingDisputeManagerAbi = [
     "outputs": [],
     "stateMutability": "nonpayable"
   },
+  // 质疑功能
   {
     "type": "function",
     "name": "submitChallenge",
     "inputs": [
       {"name": "caseId", "type": "uint256"},
-      {"name": "targetValidator", "type": "address"},
-      {"name": "choice", "type": "uint8"},
+      {"name": "challengeChoice", "type": "uint8"},
       {"name": "reason", "type": "string"},
       {"name": "evidenceHash", "type": "string"}
     ],
     "outputs": [],
     "stateMutability": "payable"
   },
+  // 查询投票会话信息
   {
     "type": "function",
     "name": "getVotingSessionInfo",
@@ -332,16 +375,18 @@ export const votingDisputeManagerAbi = [
     ],
     "stateMutability": "view"
   },
+  // 检查用户是否已投票
   {
     "type": "function",
     "name": "hasUserVoted",
     "inputs": [
       {"name": "caseId", "type": "uint256"},
-      {"name": "voter", "type": "address"}
+      {"name": "user", "type": "address"}
     ],
     "outputs": [{"name": "", "type": "bool"}],
     "stateMutability": "view"
   },
+  // 检查用户是否为选定的验证者
   {
     "type": "function",
     "name": "isUserSelectedValidator",
@@ -352,6 +397,23 @@ export const votingDisputeManagerAbi = [
     "outputs": [{"name": "", "type": "bool"}],
     "stateMutability": "view"
   },
+  // 获取质疑会话信息
+  {
+    "type": "function",
+    "name": "getChallengeSessionInfo",
+    "inputs": [{"name": "caseId", "type": "uint256"}],
+    "outputs": [
+      {"name": "startTime", "type": "uint256"},
+      {"name": "endTime", "type": "uint256"},
+      {"name": "supportChallenges", "type": "uint256"},
+      {"name": "rejectChallenges", "type": "uint256"},
+      {"name": "totalChallenges", "type": "uint256"},
+      {"name": "isActive", "type": "bool"},
+      {"name": "isCompleted", "type": "bool"}
+    ],
+    "stateMutability": "view"
+  },
+  // 事件定义
   {
     "type": "event",
     "name": "VoteSubmitted",
@@ -368,15 +430,49 @@ export const votingDisputeManagerAbi = [
     "inputs": [
       {"name": "caseId", "type": "uint256", "indexed": true},
       {"name": "challenger", "type": "address", "indexed": true},
-      {"name": "targetValidator", "type": "address", "indexed": true},
-      {"name": "choice", "type": "uint8", "indexed": false},
+      {"name": "challengeChoice", "type": "uint8", "indexed": false},
       {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
+  },
+  {
+    "type": "event",
+    "name": "VotingSessionStarted",
+    "inputs": [
+      {"name": "caseId", "type": "uint256", "indexed": true},
+      {"name": "startTime", "type": "uint256", "indexed": false},
+      {"name": "endTime", "type": "uint256", "indexed": false},
+      {"name": "validatorCount", "type": "uint256", "indexed": false}
+    ]
+  },
+  {
+    "type": "event",
+    "name": "ChallengeSessionStarted",
+    "inputs": [
+      {"name": "caseId", "type": "uint256", "indexed": true},
+      {"name": "startTime", "type": "uint256", "indexed": false},
+      {"name": "endTime", "type": "uint256", "indexed": false}
     ]
   }
 ] as const;
 
-// FundManager 合约 ABI（资金管理相关）
+// FundManager 合约 ABI（保证金管理）
 export const fundManagerAbi = [
+  // 保证金操作
+  {
+    "type": "function",
+    "name": "depositFunds",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "withdrawFunds",
+    "inputs": [{"name": "amount", "type": "uint256"}],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  // 查询用户保证金信息
   {
     "type": "function",
     "name": "getAvailableDeposit",
@@ -386,18 +482,36 @@ export const fundManagerAbi = [
   },
   {
     "type": "function",
-    "name": "getTotalDeposit",
+    "name": "getUserDepositStatus",
     "inputs": [{"name": "user", "type": "address"}],
-    "outputs": [{"name": "", "type": "uint256"}],
+    "outputs": [
+      {"name": "totalDeposit", "type": "uint256"},
+      {"name": "frozenAmount", "type": "uint256"},
+      {"name": "requiredAmount", "type": "uint256"},
+      {"name": "activeCaseCount", "type": "uint256"},
+      {"name": "operationRestricted", "type": "bool"},
+      {"name": "status", "type": "uint8"},
+      {"name": "lastUpdateTime", "type": "uint256"}
+    ],
     "stateMutability": "view"
   },
+  // 用户资料信息（包含总保证金和冻结金额）
   {
     "type": "function",
-    "name": "getFrozenDeposit",
+    "name": "userProfiles",
     "inputs": [{"name": "user", "type": "address"}],
-    "outputs": [{"name": "", "type": "uint256"}],
+    "outputs": [
+      {"name": "totalDeposit", "type": "uint256"},
+      {"name": "availableDeposit", "type": "uint256"},
+      {"name": "frozenDeposit", "type": "uint256"},
+      {"name": "role", "type": "uint8"},
+      {"name": "isActive", "type": "bool"},
+      {"name": "lastDepositTime", "type": "uint256"},
+      {"name": "activeCaseCount", "type": "uint256"}
+    ],
     "stateMutability": "view"
   },
+  // 系统配置查询
   {
     "type": "function",
     "name": "getSystemConfig",
@@ -420,6 +534,48 @@ export const fundManagerAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  // 事件定义
+  {
+    "type": "event",
+    "name": "FundsDeposited",
+    "inputs": [
+      {"name": "user", "type": "address", "indexed": true},
+      {"name": "amount", "type": "uint256", "indexed": false},
+      {"name": "totalDeposit", "type": "uint256", "indexed": false},
+      {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
+  },
+  {
+    "type": "event",
+    "name": "FundsWithdrawn",
+    "inputs": [
+      {"name": "user", "type": "address", "indexed": true},
+      {"name": "amount", "type": "uint256", "indexed": false},
+      {"name": "remainingDeposit", "type": "uint256", "indexed": false},
+      {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
+  },
+  {
+    "type": "event",
+    "name": "FundsFrozen",
+    "inputs": [
+      {"name": "user", "type": "address", "indexed": true},
+      {"name": "amount", "type": "uint256", "indexed": false},
+      {"name": "caseId", "type": "uint256", "indexed": true},
+      {"name": "reason", "type": "string", "indexed": false},
+      {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
+  },
+  {
+    "type": "event",
+    "name": "FundsUnfrozen",
+    "inputs": [
+      {"name": "user", "type": "address", "indexed": true},
+      {"name": "amount", "type": "uint256", "indexed": false},
+      {"name": "caseId", "type": "uint256", "indexed": true},
+      {"name": "timestamp", "type": "uint256", "indexed": false}
+    ]
   }
 ] as const;
 

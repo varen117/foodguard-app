@@ -3,7 +3,7 @@
  */
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useAccount, useChainId, useReadContract, useWriteContract } from "wagmi";
 import { 
@@ -14,8 +14,7 @@ import {
 import { 
   chainsToFoodGuard, 
   foodSafetyGovernanceAbi, 
-  votingManagerAbi,
-  disputeManagerAbi,
+  votingDisputeManagerAbi,
   CaseInfo, 
   CaseStatus, 
   RiskLevel,
@@ -83,8 +82,7 @@ export default function CaseDetailPage() {
   const [isChallenging, setIsChallenging] = useState(false);
 
   const contractAddress = chainsToFoodGuard[chainId]?.foodSafetyGovernance;
-  const votingManagerAddress = chainsToFoodGuard[chainId]?.votingManager;
-  const disputeManagerAddress = chainsToFoodGuard[chainId]?.disputeManager;
+  const votingDisputeManagerAddress = chainsToFoodGuard[chainId]?.votingDisputeManager;
 
   const { writeContractAsync } = useWriteContract();
 
@@ -101,12 +99,12 @@ export default function CaseDetailPage() {
 
   // TODO: 合约接口 - 获取投票会话信息
   const { data: contractVotingInfo } = useReadContract({
-    abi: votingManagerAbi,
-    address: votingManagerAddress as `0x${string}`,
+    abi: votingDisputeManagerAbi,
+    address: votingDisputeManagerAddress as `0x${string}`,
     functionName: 'getVotingSessionInfo',
     args: [BigInt(caseId)],
     query: {
-      enabled: !!votingManagerAddress && !isNaN(caseId),
+      enabled: !!votingDisputeManagerAddress && !isNaN(caseId),
     },
   });
 
@@ -114,7 +112,7 @@ export default function CaseDetailPage() {
     loadCaseDetails();
   }, [caseId, contractCaseInfo]);
 
-  const loadCaseDetails = async () => {
+  const loadCaseDetails = useCallback(async () => {
     if (!contractCaseInfo) {
       setLoading(false);
       return;
@@ -229,10 +227,10 @@ export default function CaseDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [contractCaseInfo, contractVotingInfo, caseId, address, votingDisputeManagerAddress]);
 
   const handleVote = async () => {
-    if (!isConnected || !votingManagerAddress || !caseInfo) {
+    if (!isConnected || !votingDisputeManagerAddress || !caseInfo) {
       alert("请先连接钱包");
       return;
     }
@@ -241,18 +239,16 @@ export default function CaseDetailPage() {
       setIsVoting(true);
 
       // TODO: 合约接口调用 - 提交投票
-      // submitVote(caseId, choice, reason, evidenceHashes, evidenceTypes, evidenceDescriptions)
+      // submitVote(caseId, choice, reason, evidenceHash)
       await writeContractAsync({
-        abi: votingManagerAbi,
-        address: votingManagerAddress as `0x${string}`,
+        abi: votingDisputeManagerAbi,
+        address: votingDisputeManagerAddress as `0x${string}`,
         functionName: 'submitVote',
         args: [
           BigInt(caseId),
           voteChoice,
           voteReason,
-          [], // 证据哈希数组
-          [], // 证据类型数组
-          []  // 证据描述数组
+          "" // 证据哈希
         ],
       });
 
@@ -279,7 +275,7 @@ export default function CaseDetailPage() {
   };
 
   const handleChallenge = async () => {
-    if (!isConnected || !disputeManagerAddress || !selectedValidator) {
+    if (!isConnected || !votingDisputeManagerAddress || !selectedValidator) {
       alert("请先连接钱包并选择要质疑的验证者");
       return;
     }
@@ -288,19 +284,16 @@ export default function CaseDetailPage() {
       setIsChallenging(true);
 
       // TODO: 合约接口调用 - 提交质疑
-      // submitChallenge(caseId, targetValidator, choice, reason, evidenceHashes, evidenceTypes, evidenceDescriptions)
+      // submitChallenge(caseId, challengeChoice, reason, evidenceHash)
       await writeContractAsync({
-        abi: disputeManagerAbi,
-        address: disputeManagerAddress as `0x${string}`,
+        abi: votingDisputeManagerAbi,
+        address: votingDisputeManagerAddress as `0x${string}`,
         functionName: 'submitChallenge',
         args: [
           BigInt(caseId),
-          selectedValidator as `0x${string}`,
           challengeChoice,
           challengeReason,
-          [], // 证据哈希数组
-          [], // 证据类型数组
-          []  // 证据描述数组
+          "" // 证据哈希
         ],
         // TODO: 合约要求 - 质疑需要支付保证金
         value: BigInt("50000000000000000"), // 0.05 ETH 质疑保证金

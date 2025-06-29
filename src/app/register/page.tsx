@@ -5,9 +5,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAccount, useChainId } from "wagmi";
+import { useAccount, useChainId, useWaitForTransactionReceipt } from "wagmi";
 import { formatEther } from "viem";
-import { FaUser, FaBuilding, FaShieldAlt, FaInfoCircle, FaUsers, FaRocket, FaWallet, FaTwitter, FaVoteYea } from "react-icons/fa";
+import { FaUser, FaBuilding, FaShieldAlt, FaInfoCircle, FaUsers, FaRocket, FaWallet, FaVoteYea } from "react-icons/fa";
 import { useUserRegistration, useUserRegister, useSystemConfig } from "@/hooks/useContractInteraction";
 import { Toaster, toast } from "react-hot-toast";
 
@@ -18,16 +18,36 @@ export default function RegisterPage() {
   const chainId = useChainId();
   const [userType, setUserType] = useState<'complainant' | 'dao' | 'enterprise'>('complainant');
   const [depositAmount, setDepositAmount] = useState("");
-  const [twitterId, setTwitterId] = useState("");
+  const [registrationStep, setRegistrationStep] = useState<'form' | 'submitting' | 'waiting' | 'success'>('form');
+  const [transactionHashes, setTransactionHashes] = useState<{
+    registerHash?: `0x${string}`;
+    depositHash?: `0x${string}`;
+  }>({});
 
-  // TODO: 合约接口 - 获取用户注册状态和信息
+  // 合约接口 - 获取用户注册状态和信息
   const { isRegistered: isUserRegistered, userInfo } = useUserRegistration();
   
-  // TODO: 合约接口 - 获取系统配置信息
+  // 合约接口 - 获取系统配置信息
   const systemConfig = useSystemConfig();
   
-  // TODO: 合约接口 - 用户注册功能
+  // 合约接口 - 用户注册功能
   const { mutate: registerUser, isPending: isSubmitting } = useUserRegister();
+
+  // 等待注册交易确认
+  const { data: registerReceipt, isSuccess: isRegisterSuccess, isError: isRegisterError } = useWaitForTransactionReceipt({
+    hash: transactionHashes.registerHash,
+    query: {
+      enabled: !!transactionHashes.registerHash,
+    }
+  });
+
+  // 等待保证金交易确认
+  const { data: depositReceipt, isSuccess: isDepositSuccess, isError: isDepositError } = useWaitForTransactionReceipt({
+    hash: transactionHashes.depositHash,
+    query: {
+      enabled: !!transactionHashes.depositHash,
+    }
+  });
 
   useEffect(() => {
     // 从URL参数获取注册类型
@@ -64,6 +84,30 @@ export default function RegisterPage() {
     }
   }, [systemConfig, userType]);
 
+  // 处理交易确认结果
+  useEffect(() => {
+    if (isRegisterSuccess && isDepositSuccess && registrationStep === 'waiting') {
+      setRegistrationStep('success');
+      toast.success("🎉 注册成功！欢迎加入FoodGuard社区！", {
+        duration: 5000,
+      });
+      
+      // 延迟跳转到主页
+      setTimeout(() => {
+        router.push('/');
+      }, 3000);
+    }
+  }, [isRegisterSuccess, isDepositSuccess, registrationStep, router]);
+
+  // 处理交易失败
+  useEffect(() => {
+    if ((isRegisterError || isDepositError) && registrationStep === 'waiting') {
+      setRegistrationStep('form');
+      toast.error("交易确认失败，请重试");
+      setTransactionHashes({});
+    }
+  }, [isRegisterError, isDepositError, registrationStep]);
+
   const handleRegister = async () => {
     if (!isConnected) {
       toast.error("请先连接钱包");
@@ -75,40 +119,34 @@ export default function RegisterPage() {
       return;
     }
 
-    // TODO: 合约接口 - register() 用户注册
+    setRegistrationStep('submitting');
+
+    // 提交注册交易
     registerUser({ userType, depositAmount }, {
-      onSuccess: (hash) => {
-        console.log('注册交易成功:', hash);
+      onSuccess: ({ registerHash, depositHash }) => {
+        console.log('注册交易已提交:', { registerHash, depositHash });
         
-        // 如果提供了Twitter ID，存储绑定关系  
-        // TODO: 数据库操作 - 存储Twitter绑定关系
-        if (twitterId.trim() && address) {
-          try {
-            const twitterBindings = JSON.parse(localStorage.getItem('twitterBindings') || '{}');
-            twitterBindings[address] = {
-              twitterId: twitterId.trim(),
-              userType,
-              bindTime: Date.now()
-            };
-            localStorage.setItem('twitterBindings', JSON.stringify(twitterBindings));
-            console.log('Twitter ID绑定成功:', { address, twitterId: twitterId.trim() });
-            toast.success('Twitter账户已绑定');
-          } catch (error) {
-            console.error('Twitter ID绑定失败:', error);
-            toast.error('Twitter绑定失败');
-          }
-        }
+        setTransactionHashes({ registerHash, depositHash });
+        setRegistrationStep('waiting');
         
-        toast.success(`${userType === 'enterprise' ? '企业' : userType === 'dao' ? 'DAO组织成员' : '普通用户'}注册成功！`);
-        
-        // 延迟跳转，让用户看到成功消息
-        setTimeout(() => {
-          router.push('/');
-        }, 2000);
+        toast.success("🎉 所有交易已提交！正在等待区块链确认...", {
+          duration: 5000,
+        });
       },
       onError: (error) => {
-        console.error('注册失败:', error);
-        toast.error(`注册失败: ${error.message}`);
+        console.error('注册交易提交失败:', error);
+        setRegistrationStep('form');
+        
+        // 显示具体错误信息
+        if (error.message.includes('取消了交易')) {
+          toast.error("⚠️ 交易被取消，请重新尝试注册");
+        } else if (error.message.includes('余额不足')) {
+          toast.error("💰 余额不足，请确保账户有足够的ETH");
+        } else if (error.message.includes('已经注册')) {
+          toast.error("ℹ️ 您已经注册过了，请刷新页面");
+        } else {
+          toast.error(`❌ 注册失败: ${error.message}`);
+        }
       }
     });
   };
@@ -275,6 +313,99 @@ export default function RegisterPage() {
           </div>
 
           <div className="p-8">
+            {/* 注册步骤指示器 */}
+            {registrationStep !== 'form' && (
+              <div className="mb-8">
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                    注册进度
+                  </h3>
+                  <div className="flex items-center space-x-4">
+                    {/* 步骤1: 提交交易 */}
+                    <div className="flex items-center">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        registrationStep === 'submitting' 
+                          ? 'bg-blue-500 text-white animate-pulse' 
+                          : registrationStep === 'waiting' || registrationStep === 'success'
+                            ? 'bg-green-500 text-white' 
+                            : 'bg-gray-300 text-gray-600'
+                      }`}>
+                        {registrationStep === 'submitting' ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        ) : (registrationStep === 'waiting' || registrationStep === 'success') ? (
+                          '✓'
+                        ) : (
+                          '1'
+                        )}
+                      </div>
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                        提交交易
+                      </span>
+                    </div>
+
+                    {/* 连接线 */}
+                    <div className={`flex-1 h-0.5 ${
+                      registrationStep === 'waiting' || registrationStep === 'success'
+                        ? 'bg-green-500' 
+                        : 'bg-gray-300'
+                    }`}></div>
+
+                    {/* 步骤2: 等待确认 */}
+                    <div className="flex items-center">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        registrationStep === 'waiting' 
+                          ? 'bg-blue-500 text-white animate-pulse' 
+                          : registrationStep === 'success'
+                            ? 'bg-green-500 text-white' 
+                            : 'bg-gray-300 text-gray-600'
+                      }`}>
+                        {registrationStep === 'waiting' ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        ) : registrationStep === 'success' ? (
+                          '✓'
+                        ) : (
+                          '2'
+                        )}
+                      </div>
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                        等待确认
+                      </span>
+                    </div>
+
+                    {/* 连接线 */}
+                    <div className={`flex-1 h-0.5 ${
+                      registrationStep === 'success'
+                        ? 'bg-green-500' 
+                        : 'bg-gray-300'
+                    }`}></div>
+
+                    {/* 步骤3: 完成 */}
+                    <div className="flex items-center">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        registrationStep === 'success'
+                          ? 'bg-green-500 text-white' 
+                          : 'bg-gray-300 text-gray-600'
+                      }`}>
+                        {registrationStep === 'success' ? '✓' : '3'}
+                      </div>
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                        完成注册
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 当前步骤说明 */}
+                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      {registrationStep === 'submitting' && '请在钱包中批准注册交易和保证金存入交易...'}
+                      {registrationStep === 'waiting' && '交易已提交，正在等待区块链确认...'}
+                      {registrationStep === 'success' && '注册成功！正在为您跳转到主页...'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 账户类型选择 */}
             <div className="mb-8">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -283,11 +414,12 @@ export default function RegisterPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <button
                   onClick={() => setUserType('complainant')}
+                  disabled={registrationStep !== 'form'}
                   className={`p-6 rounded-lg border-2 transition-all ${
                     userType === 'complainant'
                       ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
                       : 'border-gray-200 dark:border-gray-600 hover:border-emerald-300'
-                  }`}
+                  } ${registrationStep !== 'form' ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <FaUser className={`w-8 h-8 mx-auto mb-3 ${
                     userType === 'complainant' ? 'text-emerald-600' : 'text-gray-400'
@@ -302,11 +434,12 @@ export default function RegisterPage() {
 
                 <button
                   onClick={() => setUserType('dao')}
+                  disabled={registrationStep !== 'form'}
                   className={`p-6 rounded-lg border-2 transition-all ${
                     userType === 'dao'
                       ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
                       : 'border-gray-200 dark:border-gray-600 hover:border-purple-300'
-                  }`}
+                  } ${registrationStep !== 'form' ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <FaVoteYea className={`w-8 h-8 mx-auto mb-3 ${
                     userType === 'dao' ? 'text-purple-600' : 'text-gray-400'
@@ -321,11 +454,12 @@ export default function RegisterPage() {
 
                 <button
                   onClick={() => setUserType('enterprise')}
+                  disabled={registrationStep !== 'form'}
                   className={`p-6 rounded-lg border-2 transition-all ${
                     userType === 'enterprise'
                       ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
                       : 'border-gray-200 dark:border-gray-600 hover:border-emerald-300'
-                  }`}
+                  } ${registrationStep !== 'form' ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <FaBuilding className={`w-8 h-8 mx-auto mb-3 ${
                     userType === 'enterprise' ? 'text-emerald-600' : 'text-gray-400'
@@ -337,52 +471,6 @@ export default function RegisterPage() {
                     接受监督，可以回应投诉
                   </p>
                 </button>
-              </div>
-            </div>
-
-            {/* Twitter ID 绑定 */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Twitter ID 绑定 (可选)
-              </h3>
-              
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
-                <div className="flex items-start gap-3">
-                  <FaTwitter className="w-5 h-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1">
-                      Twitter 集成功能
-                    </h4>
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      绑定您的Twitter账户后，可以通过@FoodGuardBot在Twitter上快速创建投诉。
-                      这是可选功能，不会影响您在网站上的正常使用。
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <div className="flex items-center gap-2">
-                    <FaTwitter className="w-4 h-4 text-blue-500" />
-                    Twitter 用户名
-                  </div>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 dark:text-gray-400">@</span>
-                  </div>
-                  <input
-                    type="text"
-                    value={twitterId}
-                    onChange={(e) => setTwitterId(e.target.value.replace('@', ''))}
-                    placeholder="your_twitter_username"
-                    className="w-full pl-8 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  />
-                </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  输入您的Twitter用户名（不包含@符号）
-                </p>
               </div>
             </div>
 
@@ -424,7 +512,10 @@ export default function RegisterPage() {
                   value={depositAmount}
                   onChange={(e) => setDepositAmount(e.target.value)}
                   placeholder={`最小金额: ${minDeposit ? minDeposit : '0'} ETH`}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  disabled={registrationStep !== 'form'}
+                  className={`w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${
+                    registrationStep !== 'form' ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 />
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   当前输入: {depositAmount ? parseFloat(depositAmount) : 0} ETH
@@ -435,13 +526,23 @@ export default function RegisterPage() {
             {/* 提交按钮 */}
             <button
               onClick={handleRegister}
-              disabled={isSubmitting || !depositAmount}
+              disabled={registrationStep !== 'form' || !depositAmount}
               className="btn btn-primary w-full py-4"
             >
-              {isSubmitting ? (
+              {registrationStep === 'submitting' ? (
                 <div className="flex items-center justify-center gap-2">
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  注册中...
+                  正在提交交易...
+                </div>
+              ) : registrationStep === 'waiting' ? (
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  等待交易确认...
+                </div>
+              ) : registrationStep === 'success' ? (
+                <div className="flex items-center justify-center gap-2">
+                  <FaShieldAlt className="w-5 h-5" />
+                  注册成功！正在跳转...
                 </div>
               ) : (
                 `注册为${userType === 'enterprise' ? '企业' : userType === 'dao' ? 'DAO组织成员' : '投诉者'}`

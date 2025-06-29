@@ -52,7 +52,7 @@ export default function ComplaintPage() {
       console.log('用户未注册，跳转到注册页面');
       router.push('/register');
     }
-  }, [isUserRegistered, isConnected, router, address]);
+  }, [isUserRegistered, isConnected]);
 
   useEffect(() => {
     // 设置默认保证金
@@ -62,7 +62,7 @@ export default function ComplaintPage() {
         depositAmount: systemConfig.minComplaintDeposit
       }));
     }
-  }, [systemConfig, address]);
+  }, [systemConfig]);
 
   const handleInputChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const value = e.target.value;
