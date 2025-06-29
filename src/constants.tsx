@@ -131,7 +131,7 @@ export const foodSafetyGovernanceAbi = [
       {"name": "riskLevel", "type": "uint8"}
     ],
     "outputs": [{"name": "caseId", "type": "uint256"}],
-    "stateMutability": "payable"
+    "stateMutability": "nonpayable"
   },
   // 查询函数
   {

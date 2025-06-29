@@ -538,7 +538,6 @@ export function useCreateComplaint() {
       incidentTime: number;
       evidenceHash: string;
       riskLevel: RiskLevel;
-      depositAmount?: string;
     }) => {
       if (!contracts) {
         const error = new Error("合约地址未找到");
@@ -559,13 +558,34 @@ export function useCreateComplaint() {
             params.evidenceHash,
             params.riskLevel
           ],
-          value: params.depositAmount ? parseEther(params.depositAmount) : undefined,
         });
 
         console.log('创建投诉交易已提交，hash:', hash);
         return hash;
       } catch (error) {
         console.error('创建投诉失败:', error);
+        
+        // 检查是否为资金不足错误
+        if (error.message?.includes('Insufficient funds') || 
+            error.message?.includes('exceeds the balance') ||
+            error.shortMessage?.includes('Insufficient funds')) {
+          
+          const estimatedGasCost = '0.001'; // 预估的Gas费用（已大幅降低）
+          
+          const detailedMessage = `账户余额不足！
+          
+需要的资金:
+• 预估Gas费用: ${estimatedGasCost} ETH
+
+解决方案:
+1. 向钱包充值更多ETH
+2. 尝试在网络较空闲时交易以降低Gas费用
+
+注意：保证金将从您预存在FundManager中的资金自动扣除，无需额外发送ETH。`;
+          
+          throw new Error(detailedMessage);
+        }
+        
         throw error;
       }
     },
@@ -576,7 +596,18 @@ export function useCreateComplaint() {
       queryClient.invalidateQueries({ queryKey: ['activeCases'] });
     },
     onError: (error) => {
-      toast.error(`投诉提交失败: ${error.message}`);
+      // 对资金不足错误显示特殊样式的toast
+      if (error.message?.includes('账户余额不足')) {
+        toast.error(error.message, {
+          duration: 8000,
+          style: {
+            maxWidth: '500px',
+            whiteSpace: 'pre-line'
+          }
+        });
+      } else {
+        toast.error(`投诉提交失败: ${error.message}`);
+      }
     },
   });
 }

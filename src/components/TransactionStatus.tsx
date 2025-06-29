@@ -105,6 +105,62 @@ export function TransactionStatus({
     return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
   };
 
+  // 分析错误类型并提供友好的错误信息
+  const getErrorInfo = (error: any) => {
+    const errorMessage = error?.message || error?.shortMessage || '';
+    
+    if (errorMessage.includes('Insufficient funds') || 
+        errorMessage.includes('exceeds the balance')) {
+      return {
+        type: 'insufficient_funds',
+        title: '账户余额不足',
+        message: '您的账户余额不足以支付交易费用和发送金额',
+        solutions: [
+          '向钱包充值更多ETH',
+          '等待网络拥堵降低以减少Gas费用',
+          '尝试降低交易金额（如适用）'
+        ]
+      };
+    }
+    
+    if (errorMessage.includes('User denied') || 
+        errorMessage.includes('user rejected')) {
+      return {
+        type: 'user_rejected',
+        title: '交易被用户取消',
+        message: '您在钱包中取消了交易',
+        solutions: [
+          '重新尝试交易',
+          '检查交易详情是否正确'
+        ]
+      };
+    }
+    
+    if (errorMessage.includes('gas')) {
+      return {
+        type: 'gas_error',
+        title: 'Gas相关错误',
+        message: '交易的Gas设置可能有问题',
+        solutions: [
+          '等待网络拥堵降低',
+          '尝试增加Gas费用',
+          '稍后重新尝试'
+        ]
+      };
+    }
+    
+    return {
+      type: 'unknown',
+      title: '交易失败',
+      message: errorMessage,
+      solutions: [
+        '检查网络连接',
+        '确认钱包配置正确',
+        '稍后重新尝试'
+      ]
+    };
+  };
+
   if (!txHash) {
     return null;
   }
@@ -172,30 +228,58 @@ export function TransactionStatus({
           </div>
         )}
 
-        <div className="flex items-center gap-2 text-sm">
+        <div className="space-y-3">
           {isLoading && (
-            <>
+            <div className="flex items-center gap-2 text-sm">
               <FaSpinner className="w-4 h-4 text-blue-500 animate-spin" />
               <span className="text-blue-600 dark:text-blue-400">
                 等待交易确认... (Status: {status})
               </span>
-            </>
+            </div>
           )}
+          
           {isSuccess && (
-            <>
+            <div className="flex items-center gap-2 text-sm">
               <FaCheckCircle className="w-4 h-4 text-green-500" />
               <span className="text-green-600 dark:text-green-400">
                 交易已确认，{description}成功！
               </span>
-            </>
+            </div>
           )}
-          {isError && (
-            <>
-              <FaExclamationCircle className="w-4 h-4 text-red-500" />
-              <span className="text-red-600 dark:text-red-400">
-                交易失败: {error?.message || "未知错误"}
-              </span>
-            </>
+          
+          {isError && error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+              {(() => {
+                const errorInfo = getErrorInfo(error);
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <FaExclamationCircle className="w-4 h-4 text-red-500" />
+                      <span className="font-medium text-red-700 dark:text-red-300">
+                        {errorInfo.title}
+                      </span>
+                    </div>
+                    
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      {errorInfo.message}
+                    </p>
+                    
+                    {errorInfo.solutions.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-red-700 dark:text-red-300 mb-1">
+                          解决方案:
+                        </p>
+                        <ul className="text-xs text-red-600 dark:text-red-400 space-y-1">
+                          {errorInfo.solutions.map((solution, index) => (
+                            <li key={index}>• {solution}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
           )}
         </div>
 

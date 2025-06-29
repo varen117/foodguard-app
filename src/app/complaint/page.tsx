@@ -5,9 +5,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount, useChainId } from "wagmi";
-import { FaPlus, FaMinus, FaUpload, FaInfoCircle, FaExclamationTriangle, FaShieldAlt } from "react-icons/fa";
+import { useAccount, useChainId, useBalance } from "wagmi";
+import { FaPlus, FaExclamationTriangle, FaShieldAlt } from "react-icons/fa";
 import { InputField } from "@/components/ui/InputField";
+import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import { RiskLevel } from "@/constants";
 import { useUserRegistration, useCreateComplaint, useSystemConfig, useConfirmTransactionAndRefreshData, useForceRefreshData } from "@/hooks/useContractInteraction";
 import { Toaster, toast } from "react-hot-toast";
@@ -26,6 +27,14 @@ export default function ComplaintPage() {
   const chainId = useChainId();
   const queryClient = useQueryClient();
   
+  // 获取用户ETH余额
+  const { data: balance } = useBalance({
+    address: address,
+    query: {
+      enabled: !!address,
+    }
+  });
+  
   // 表单状态
   const [formData, setFormData] = useState({
     enterprise: "",
@@ -33,7 +42,6 @@ export default function ComplaintPage() {
     complaintDescription: "",
     location: "",
     incidentTime: "",
-    depositAmount: "",
     riskLevel: "0", // 默认低风险
   });
   
@@ -53,6 +61,12 @@ export default function ComplaintPage() {
   
   // 交易确认和数据刷新
   const { mutate: confirmTransactionAndRefresh } = useConfirmTransactionAndRefreshData();
+
+  // 计算预估总成本 - 只需要Gas费用，不需要发送ETH
+  const estimatedGasCost = 0.001; // 降低Gas费用预估，因为不发送ETH
+  const totalEstimatedCost = estimatedGasCost; // 只需要Gas费用
+  const userBalance = parseFloat(balance?.formatted || '0');
+  const hasInsufficientFunds = totalEstimatedCost > userBalance;
 
   useEffect(() => {
     // 检查用户注册状态，如果已连接钱包但未注册，直接跳转到注册页面
@@ -89,6 +103,22 @@ export default function ComplaintPage() {
     }
   };
 
+  // 处理日期时间选择器的变化
+  const handleDateTimeChange = (value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      incidentTime: value
+    }));
+    
+    // 清除相关错误
+    if (errors.incidentTime) {
+      setErrors(prev => ({
+        ...prev,
+        incidentTime: ""
+      }));
+    }
+  };
+
   // 删除证据相关的函数，现在只使用单个证据哈希
 
   const validateForm = () => {
@@ -121,19 +151,16 @@ export default function ComplaintPage() {
       }
     }
 
-    if (!formData.depositAmount) {
-      newErrors.depositAmount = "请输入保证金金额";
-    } else {
-      const depositAmount = parseFloat(formData.depositAmount);
-      const minDeposit = systemConfig ? parseFloat(systemConfig.minComplaintDeposit) : 0;
-      if (depositAmount < minDeposit) {
-        newErrors.depositAmount = `保证金不能少于 ${minDeposit} ETH`;
-      }
-    }
+    // 保证金验证已移除 - 保证金从预存资金中自动扣除
 
     // 检查证据
     if (!evidenceHash.trim()) {
       newErrors.evidenceHash = "请提供证据哈希或存储链接";
+    }
+
+    // 检查余额是否足够支付Gas费用
+    if (hasInsufficientFunds) {
+      newErrors.balance = `余额不足！需要 ${totalEstimatedCost.toFixed(4)} ETH 支付Gas费用，当前余额 ${userBalance.toFixed(4)} ETH`;
     }
 
     setErrors(newErrors);
@@ -152,6 +179,12 @@ export default function ComplaintPage() {
       return;
     }
 
+    // 最后检查余额是否足够支付Gas费用
+    if (hasInsufficientFunds) {
+      toast.error(`余额不足！需要至少 ${totalEstimatedCost.toFixed(4)} ETH 支付Gas费用`);
+      return;
+    }
+
     // TODO: 合约接口 - createComplaint() 创建投诉
     const incidentTimestamp = Math.floor(new Date(formData.incidentTime).getTime() / 1000);
 
@@ -163,7 +196,6 @@ export default function ComplaintPage() {
       incidentTime: incidentTimestamp,
       evidenceHash: evidenceHash,
       riskLevel: parseInt(formData.riskLevel) as RiskLevel,
-      depositAmount: formData.depositAmount,
     };
 
     createComplaint(
@@ -215,28 +247,14 @@ export default function ComplaintPage() {
           </div>
 
           <div className="p-8">
-            {/* 风险提示 */}
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-8">
-              <div className="flex items-start gap-3">
-                <FaInfoCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
-                <div>
-                  <h4 className="font-medium text-yellow-900 dark:text-yellow-100 mb-1">
-                    投诉须知
-                  </h4>
-                  <ul className="text-sm text-yellow-800 dark:text-yellow-200 space-y-1">
-                    <li>• 请确保投诉内容真实准确，虚假投诉将面临保证金惩罚</li>
-                    <li>• 提供的证据将被公开用于验证过程</li>
-                    <li>• 投诉一旦提交无法撤销，请仔细核对信息</li>
-                    <li>• 高风险案件将触发特殊处理流程</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
+
+
+
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* 左侧：基本信息 */}
               <div className="space-y-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h3 className="text-lg font-semibold text-black dark:text-white">
                   基本信息
                 </h3>
 
@@ -279,31 +297,31 @@ export default function ComplaintPage() {
                   error={errors.location}
                 />
 
-                <InputField
+                <DateTimePicker
                   label="事发时间"
-                  type="datetime-local"
                   value={formData.incidentTime}
-                  onChange={handleInputChange('incidentTime')}
+                  onChange={handleDateTimeChange}
                   required
                   error={errors.incidentTime}
+                  helpText="选择食品安全问题发生的具体时间，不能晚于当前时间"
                 />
 
                 {/* 风险等级选择 */}
                 <div>
-                  <label className="form-label">
+                  <label className="block text-sm font-medium text-black dark:text-white">
                     风险等级 *
                   </label>
                   <select
                     value={formData.riskLevel}
                     onChange={handleInputChange('riskLevel')}
-                    className="form-input"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-black dark:text-white border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
                     required
                   >
                     <option value="0">低风险 - 一般食品安全问题</option>
                     <option value="1">中风险 - 影响较大的食品安全问题</option>
                     <option value="2">高风险 - 严重的食品安全问题，可能危及生命</option>
                   </select>
-                  <p className="text-sm text-muted mt-1">
+                  <p className="text-sm text-gray-500 mt-1">
                     请根据问题的严重程度选择合适的风险等级，这将影响保证金要求和处理流程
                   </p>
                   {errors.riskLevel && (
@@ -311,70 +329,63 @@ export default function ComplaintPage() {
                   )}
                 </div>
 
-                <InputField
-                  label="保证金金额 (ETH)"
-                  type="number"
-                  value={formData.depositAmount}
-                  onChange={handleInputChange('depositAmount')}
-                  placeholder="0.01"
-                  min={systemConfig?.minComplaintDeposit || "0.01"}
-                  step="0.001"
-                  required
-                  error={errors.depositAmount}
-                  helpText={`最低保证金: ${systemConfig?.minComplaintDeposit || "0.01"} ETH`}
-                />
+
               </div>
 
               {/* 右侧：证据上传 */}
               <div className="space-y-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h3 className="text-lg font-semibold text-black dark:text-white">
                   证据材料
                 </h3>
 
                 <div>
-                  <label className="form-label">
+                  <label className="block text-sm font-medium text-black dark:text-white">
                     证据哈希 / 存储链接 *
                   </label>
                   <textarea
                     value={evidenceHash}
                     onChange={(e) => setEvidenceHash(e.target.value)}
-                    placeholder="请输入证据的IPFS哈希、文件链接或其他存储标识..."
-                    className="form-input"
-                    rows={4}
+                    placeholder="证据要求：
+• 照片：产品外观、标签、生产日期等
+• 文档：购买凭证、检验报告、医疗诊断等  
+• 视频：问题展示、现场记录等
+• 其他：相关证明材料
+
+请输入证据的IPFS哈希、文件链接或其他存储标识..."
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-black dark:text-white border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
+                    rows={6}
                     required
                   />
                   {errors.evidenceHash && (
                     <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.evidenceHash}</p>
                   )}
-                  <p className="text-sm text-muted mt-1">
+                  <p className="text-sm text-gray-500 mt-1">
                     支持 IPFS 哈希、去中心化存储链接或其他可验证的证据标识
                   </p>
                 </div>
 
-                {/* 证据类型说明 */}
-                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                    证据要求
-                  </h4>
-                  <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                    <li>• 照片：产品外观、标签、生产日期等</li>
-                    <li>• 文档：购买凭证、检验报告、医疗诊断等</li>
-                    <li>• 视频：问题展示、现场记录等</li>
-                    <li>• 其他：相关证明材料</li>
-                  </ul>
-                </div>
+
 
                 {/* 提交按钮 */}
                 <div className="pt-6">
                   <button
                     onClick={handleSubmit}
-                    disabled={isSubmitting || showTransactionStatus}
-                    className="w-full btn btn-primary text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isSubmitting || showTransactionStatus || hasInsufficientFunds}
+                    className={`w-full text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
+                      hasInsufficientFunds 
+                        ? 'bg-gray-400 text-white cursor-not-allowed' 
+                        : 'btn btn-primary'
+                    }`}
                   >
                     {isSubmitting ? (
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                         提交中...
+                      </div>
+                    ) : hasInsufficientFunds ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <FaExclamationTriangle className="w-5 h-5" />
+                        余额不足，无法支付Gas费用
                       </div>
                     ) : (
                       <div className="flex items-center justify-center gap-2">
@@ -385,8 +396,21 @@ export default function ComplaintPage() {
                   </button>
                   
                   <p className="text-xs text-muted text-center mt-2">
-                    点击创建投诉即表示您同意承担相应的法律责任
+                    {hasInsufficientFunds 
+                      ? `需要充值 ${(totalEstimatedCost - userBalance).toFixed(4)} ETH 才能支付Gas费用`
+                      : '点击创建投诉即表示您同意承担相应的法律责任'
+                    }
                   </p>
+                  
+                  {/* 余额错误提示 */}
+                  {errors.balance && (
+                    <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
+                        <FaExclamationTriangle className="w-4 h-4" />
+                        {errors.balance}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* 交易状态显示 */}
@@ -439,6 +463,8 @@ export default function ComplaintPage() {
             </div>
           </div>
         </div>
+        
+
       </div>
       
       {/* Toast 通知组件 */}
