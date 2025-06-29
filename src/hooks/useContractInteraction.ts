@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, useChainId, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseEther, formatEther } from "viem";
 import { toast } from "react-hot-toast";
+import { useMemo } from "react";
 
 import { 
   chainsToFoodGuard, 
@@ -703,17 +704,19 @@ export function useSystemConfig() {
     },
   });
 
-  return systemConfig ? {
-    minComplaintDeposit: formatEther(systemConfig.minComplaintDeposit),
-    minEnterpriseDeposit: formatEther(systemConfig.minEnterpriseDeposit),
-    minDaoDeposit: formatEther(systemConfig.minDaoDeposit),
-    votingPeriod: Number(systemConfig.votingPeriod),
-    challengePeriod: Number(systemConfig.challengePeriod),
-    minValidators: Number(systemConfig.minValidators),
-    maxValidators: Number(systemConfig.maxValidators),
-    rewardPoolPercentage: Number(systemConfig.rewardPoolPercentage),
-    operationalFeePercentage: Number(systemConfig.operationalFeePercentage)
-  } : null;
+  return useMemo(() => {
+    return systemConfig ? {
+      minComplaintDeposit: formatEther(systemConfig.minComplaintDeposit),
+      minEnterpriseDeposit: formatEther(systemConfig.minEnterpriseDeposit),
+      minDaoDeposit: formatEther(systemConfig.minDaoDeposit),
+      votingPeriod: Number(systemConfig.votingPeriod),
+      challengePeriod: Number(systemConfig.challengePeriod),
+      minValidators: Number(systemConfig.minValidators),
+      maxValidators: Number(systemConfig.maxValidators),
+      rewardPoolPercentage: Number(systemConfig.rewardPoolPercentage),
+      operationalFeePercentage: Number(systemConfig.operationalFeePercentage)
+    } : null;
+  }, [systemConfig]);
 }
 
 // Hook: 结束投票并开始质疑

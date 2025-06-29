@@ -56,13 +56,13 @@ export default function ComplaintPage() {
 
   useEffect(() => {
     // 设置默认保证金
-    if (systemConfig) {
+    if (systemConfig?.minComplaintDeposit) {
       setFormData(prev => ({
         ...prev,
         depositAmount: systemConfig.minComplaintDeposit
       }));
     }
-  }, [systemConfig]);
+  }, [systemConfig?.minComplaintDeposit]);
 
   const handleInputChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const value = e.target.value;

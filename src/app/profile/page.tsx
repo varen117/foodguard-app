@@ -119,11 +119,7 @@ export default function ProfilePage() {
     }
   });
 
-  useEffect(() => {
-    if (isConnected && address && isUserRegistered) {
-      loadUserProfile();
-    }
-  }, [isConnected, address, isUserRegistered]);
+
 
   // 处理交易确认结果
   useEffect(() => {
@@ -201,140 +197,145 @@ export default function ProfilePage() {
     });
   };
 
-  const loadUserProfile = useCallback(async () => {
-    if (!address || !userStatsData || !userCasesData) return;
+  // 数据加载 useEffect - 避免无限循环
+  useEffect(() => {
+    if (!isConnected || !address || !isUserRegistered || !userStatsData || !userCasesData) return;
 
-    try {
-      setLoading(true);
+    const loadUserProfile = async () => {
+      try {
+        setLoading(true);
 
-      // 数据库查询 - 获取用户基本信息和统计数据
-      const realStats = userStatsData.success ? userStatsData.data.stats : null;
-      const registration = userStatsData.success ? userStatsData.data.registration : null;
-      const realCases = userCasesData.success ? userCasesData.data : null;
+        // 数据库查询 - 获取用户基本信息和统计数据
+        const realStats = userStatsData.success ? userStatsData.data.stats : null;
+        const registration = userStatsData.success ? userStatsData.data.registration : null;
+        const realCases = userCasesData.success ? userCasesData.data : null;
 
-      const profile: UserProfile = {
-        // 基本信息 (现在使用默认值，后续可以从数据库获取)
-        name: "用户",
-        email: "",
-        phone: "",
-        address: "",
-        avatar: "",
-        bio: "区块链食品安全治理系统用户",
-        website: "",
-        registrationTime: registration ? BigInt(registration.timestamp) * BigInt(1000) : BigInt(Date.now()),
-        lastLoginTime: BigInt(Date.now()),
-        isVerified: true,
+        const profile: UserProfile = {
+          // 基本信息 (现在使用默认值，后续可以从数据库获取)
+          name: "用户",
+          email: "",
+          phone: "",
+          address: "",
+          avatar: "",
+          bio: "区块链食品安全治理系统用户",
+          website: "",
+          registrationTime: registration ? BigInt(registration.timestamp) * BigInt(1000) : BigInt(Date.now()),
+          lastLoginTime: BigInt(Date.now()),
+          isVerified: true,
+          
+          // 数据库查询 - 真实的用户统计信息
+          totalCasesParticipated: realStats?.totalComplaints || 0,
+          totalVotes: realStats?.totalVotes || 0,
+          totalChallenges: 0, // 暂时没有质疑数据
+          successfulVotes: realStats?.totalVotes || 0, // 简化处理
+          successfulChallenges: 0,
+          averageResponseTime: 0,
+          
+          // 合约查询 - 获取链上数据
+          userRole: userInfo?.role === 2 ? "DAO_MEMBER" : userInfo?.role === 1 ? "ENTERPRISE" : "COMPLAINANT",
+          reputationScore: Number(userInfo?.reputation || 0),
+          isActive: userInfo?.isActive || false,
+        };
+
+        setProfile(profile);
+        setEditForm(profile);
+
+        // 数据库查询 - 获取用户参与的案件 (基于真实数据)
+        const participatedCases: ParticipatedCase[] = [];
         
-        // 数据库查询 - 真实的用户统计信息
-        totalCasesParticipated: realStats?.totalComplaints || 0,
-        totalVotes: realStats?.totalVotes || 0,
-        totalChallenges: 0, // 暂时没有质疑数据
-        successfulVotes: realStats?.totalVotes || 0, // 简化处理
-        successfulChallenges: 0,
-        averageResponseTime: 0,
+        // 转换投诉记录
+        if (realCases?.complaints) {
+          realCases.complaints.forEach((complaint: any) => {
+            participatedCases.push({
+              caseId: BigInt(complaint.case_id || 0),
+              complainant: complaint.complainant,
+              enterprise: complaint.enterprise,
+              complaintTitle: complaint.complaint_title || "食品安全投诉",
+              complaintDescription: "",
+              location: "未知",
+              incidentTime: BigInt((complaint.timestamp || 0) * 1000),
+              complaintTime: BigInt((complaint.timestamp || 0) * 1000),
+              status: CaseStatus.PENDING, // 需要根据case_status_updated表查询
+              riskLevel: complaint.risk_level || RiskLevel.LOW,
+              complaintUpheld: false,
+              complainantDeposit: BigInt("0"),
+              enterpriseDeposit: BigInt("0"),
+              isCompleted: false,
+              completionTime: BigInt(0),
+              complainantEvidenceHash: "",
+              
+              participationType: 'complainant',
+              participationTime: BigInt((complaint.timestamp || 0) * 1000),
+              earnedReward: BigInt("0"),
+              paidPenalty: BigInt("0"),
+            });
+          });
+        }
         
-        // 合约查询 - 获取链上数据
-        userRole: userInfo?.role === 2 ? "DAO_MEMBER" : userInfo?.role === 1 ? "ENTERPRISE" : "COMPLAINANT",
-        reputationScore: Number(userInfo?.reputation || 0),
-        isActive: userInfo?.active || false,
-      };
+        setParticipatedCases(participatedCases);
 
-      setProfile(profile);
-      setEditForm(profile);
+        // 数据库查询 - 获取用户活动记录 (基于真实数据)
+        const activities: ActivityRecord[] = [];
+        
+        // 添加保证金记录
+        if (realCases?.deposits) {
+          realCases.deposits.forEach((deposit: any, index: number) => {
+            activities.push({
+              id: index + 1,
+              activityType: 'deposit',
+              description: `存入保证金 ${formatEther(BigInt(deposit.amount))} ETH`,
+              timestamp: BigInt((deposit.timestamp || 0) * 1000),
+              result: 'success',
+              rewardAmount: BigInt("0"),
+              penaltyAmount: BigInt("0")
+            });
+          });
+        }
+        
+        // 添加投票记录
+        if (realCases?.votes) {
+          realCases.votes.forEach((vote: any, index: number) => {
+            activities.push({
+              id: activities.length + 1,
+              activityType: 'vote',
+              description: `在案件 #${vote.case_id || 'unknown'} 中进行投票`,
+              caseId: parseInt(vote.case_id) || 0,
+              timestamp: BigInt((vote.timestamp || 0) * 1000),
+              result: 'success',
+              rewardAmount: BigInt("0"),
+              penaltyAmount: BigInt("0")
+            });
+          });
+        }
+        
+        // 添加奖励记录
+        if (realCases?.rewards) {
+          realCases.rewards.forEach((reward: any, index: number) => {
+            activities.push({
+              id: activities.length + 1,
+              activityType: 'reward',
+              description: `获得奖励 ${formatEther(BigInt(reward.amount || 0))} ETH`,
+              timestamp: BigInt((reward.timestamp || 0) * 1000),
+              result: 'success',
+              rewardAmount: BigInt(reward.amount || 0),
+              penaltyAmount: BigInt("0")
+            });
+          });
+        }
+        
+        // 按时间排序
+        activities.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+        setActivities(activities);
 
-      // 数据库查询 - 获取用户参与的案件 (基于真实数据)
-      const participatedCases: ParticipatedCase[] = [];
-      
-      // 转换投诉记录
-      if (realCases?.complaints) {
-        realCases.complaints.forEach((complaint: any) => {
-          participatedCases.push({
-            caseId: BigInt(complaint.case_id || 0),
-            complainant: complaint.complainant,
-            enterprise: complaint.enterprise,
-            complaintTitle: complaint.complaint_title || "食品安全投诉",
-            complaintDescription: "",
-            location: "未知",
-            incidentTime: BigInt((complaint.timestamp || 0) * 1000),
-            complaintTime: BigInt((complaint.timestamp || 0) * 1000),
-            status: CaseStatus.PENDING, // 需要根据case_status_updated表查询
-            riskLevel: complaint.risk_level || RiskLevel.LOW,
-            complaintUpheld: false,
-            complainantDeposit: BigInt("0"),
-            enterpriseDeposit: BigInt("0"),
-            isCompleted: false,
-            completionTime: BigInt(0),
-            complainantEvidenceHash: "",
-            
-            participationType: 'complainant',
-            participationTime: BigInt((complaint.timestamp || 0) * 1000),
-            earnedReward: BigInt("0"),
-            paidPenalty: BigInt("0"),
-          });
-        });
+      } catch (error) {
+        console.error('加载用户资料失败:', error);
+      } finally {
+        setLoading(false);
       }
-      
-      setParticipatedCases(participatedCases);
+    };
 
-      // 数据库查询 - 获取用户活动记录 (基于真实数据)
-      const activities: ActivityRecord[] = [];
-      
-      // 添加保证金记录
-      if (realCases?.deposits) {
-        realCases.deposits.forEach((deposit: any, index: number) => {
-          activities.push({
-            id: index + 1,
-            activityType: 'deposit',
-            description: `存入保证金 ${formatEther(BigInt(deposit.amount))} ETH`,
-            timestamp: BigInt((deposit.timestamp || 0) * 1000),
-            result: 'success',
-            rewardAmount: BigInt("0"),
-            penaltyAmount: BigInt("0")
-          });
-        });
-      }
-      
-      // 添加投票记录
-      if (realCases?.votes) {
-        realCases.votes.forEach((vote: any, index: number) => {
-          activities.push({
-            id: activities.length + 1,
-            activityType: 'vote',
-            description: `在案件 #${vote.case_id || 'unknown'} 中进行投票`,
-            caseId: parseInt(vote.case_id) || 0,
-            timestamp: BigInt((vote.timestamp || 0) * 1000),
-            result: 'success',
-            rewardAmount: BigInt("0"),
-            penaltyAmount: BigInt("0")
-          });
-        });
-      }
-      
-      // 添加奖励记录
-      if (realCases?.rewards) {
-        realCases.rewards.forEach((reward: any, index: number) => {
-          activities.push({
-            id: activities.length + 1,
-            activityType: 'reward',
-            description: `获得奖励 ${formatEther(BigInt(reward.amount || 0))} ETH`,
-            timestamp: BigInt((reward.timestamp || 0) * 1000),
-            result: 'success',
-            rewardAmount: BigInt(reward.amount || 0),
-            penaltyAmount: BigInt("0")
-          });
-        });
-      }
-      
-      // 按时间排序
-      activities.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
-      setActivities(activities);
-
-    } catch (error) {
-      console.error('加载用户资料失败:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [address, userInfo, userStatsData, userCasesData]);
+    loadUserProfile();
+  }, [isConnected, address, isUserRegistered, userStatsData?.success, userCasesData?.success, userInfo?.role, userInfo?.isActive]);
 
 
 

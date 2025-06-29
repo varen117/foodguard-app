@@ -21,17 +21,13 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   // 允许访问的公共路径（无需钱包连接）
   const publicPaths = ['/register'];
 
-  const handleRedirect = useCallback(() => {
+  useEffect(() => {
     if (!isConnecting && !isConnected && !publicPaths.includes(pathname)) {
       setIsRedirecting(true);
       router.push('/register');
     }
-  }, [isConnecting, isConnected, pathname, router]);
-
-  useEffect(() => {
-    handleRedirect();
     // 移除自动跳转逻辑，让已连接钱包的用户能够访问注册页面
-  }, [handleRedirect]);
+  }, [isConnecting, isConnected, pathname]);
 
   // 显示加载状态的条件：
   // 1. 正在连接钱包

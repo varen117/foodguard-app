@@ -63,7 +63,7 @@ export default function RegisterPage() {
       console.log('用户已注册，跳转到主页');
       router.push('/');
     }
-  }, [isConnected, isUserRegistered, router]);
+  }, [isConnected, isUserRegistered]);
 
   useEffect(() => {
     // 设置默认保证金金额
@@ -97,7 +97,7 @@ export default function RegisterPage() {
         router.push('/');
       }, 3000);
     }
-  }, [isRegisterSuccess, isDepositSuccess, registrationStep, router]);
+  }, [isRegisterSuccess, isDepositSuccess, registrationStep]);
 
   // 处理交易失败
   useEffect(() => {
