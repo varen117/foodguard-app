@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAccount, useChainId, useWaitForTransactionReceipt } from "wagmi";
 import { formatEther } from "viem";
-import { FaUser, FaBuilding, FaShieldAlt, FaInfoCircle, FaUsers, FaRocket, FaWallet, FaVoteYea } from "react-icons/fa";
+import { FaUser, FaBuilding, FaShieldAlt, FaInfoCircle, FaUsers, FaRocket, FaWallet, FaVoteYea, FaLock } from "react-icons/fa";
 import { useUserRegistration, useUserRegister, useSystemConfig } from "@/hooks/useContractInteraction";
 import { Toaster, toast } from "react-hot-toast";
 import TransactionStatus from "@/components/TransactionStatus";
@@ -70,11 +70,12 @@ export default function RegisterPage() {
 
   useEffect(() => {
     // 如果用户已注册，跳转到主页
-    if (isConnected && isUserRegistered) {
+    // 但是如果正在进行注册过程，不要跳转，等待注册完成
+    if (isConnected && isUserRegistered && registrationStep === 'form') {
       console.log('用户已注册，跳转到主页');
       router.push('/');
     }
-  }, [isConnected, isUserRegistered]);
+  }, [isConnected, isUserRegistered, registrationStep, router]);
 
   useEffect(() => {
     // 设置默认保证金金额
@@ -95,25 +96,58 @@ export default function RegisterPage() {
     }
   }, [systemConfig, userType]);
 
-  // 处理交易确认结果
+  // 处理交易确认结果 - 只有在两个交易都完全确认且有有效的receipt时才跳转
   useEffect(() => {
-    if (isRegisterSuccess && isDepositSuccess && registrationStep === 'waiting') {
+    // 严格检查条件：
+    // 1. 两个交易都成功
+    // 2. 两个receipt都存在且有效
+    // 3. 当前状态为等待中
+    // 4. 两个receipt都有区块号（确认已上链）
+    if (isRegisterSuccess && 
+        isDepositSuccess && 
+        registrationStep === 'waiting' &&
+        registerReceipt && 
+        depositReceipt &&
+        registerReceipt.blockNumber &&
+        depositReceipt.blockNumber) {
+      
+      console.log('所有交易都已确认，准备完成注册流程...');
+      console.log('注册交易receipt:', registerReceipt);
+      console.log('保证金交易receipt:', depositReceipt);
+      
       setRegistrationStep('success');
       toast.success("🎉 注册成功！欢迎加入FoodGuard社区！", {
         duration: 5000,
       });
       
-      // 刷新相关查询缓存以更新UI数据
-      queryClient.invalidateQueries({ queryKey: ['userRegistration'] });
-      queryClient.invalidateQueries({ queryKey: ['userDeposit'] });
-      queryClient.invalidateQueries({ queryKey: ['userStats'] });
+      // 强制刷新所有查询缓存以更新UI数据
+      const refreshData = async () => {
+        console.log('开始强制刷新注册状态数据...');
+        
+        // 完全清除所有缓存
+        queryClient.clear();
+        
+        // 等待缓存清除完成
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // 手动触发重新获取用户注册状态
+        queryClient.refetchQueries();
+        
+        console.log('注册状态数据刷新完成');
+        
+        // 等待数据刷新完成后再跳转
+        setTimeout(() => {
+          console.log('准备跳转到首页...');
+          toast.success("🏠 正在跳转到首页，如果状态未更新请点击刷新按钮", {
+            duration: 3000,
+          });
+          router.push('/');
+        }, 3000); // 增加等待时间到3秒
+      };
       
-      // 延迟跳转到主页
-      setTimeout(() => {
-        router.push('/');
-      }, 3000);
+      refreshData();
     }
-  }, [isRegisterSuccess, isDepositSuccess, registrationStep, queryClient]);
+  }, [isRegisterSuccess, isDepositSuccess, registerReceipt, depositReceipt, registrationStep, queryClient, router]);
 
   // 处理交易失败
   useEffect(() => {
@@ -123,6 +157,41 @@ export default function RegisterPage() {
       setTransactionHashes({});
     }
   }, [isRegisterError, isDepositError, registrationStep]);
+
+  // 防止用户在注册过程中离开页面
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (registrationStep === 'submitting' || registrationStep === 'waiting') {
+        e.preventDefault();
+        e.returnValue = '注册正在进行中，离开可能导致注册失败。确定要离开吗？';
+        return '注册正在进行中，离开可能导致注册失败。确定要离开吗？';
+      }
+    };
+
+    const handlePopState = (e: PopStateEvent) => {
+      if (registrationStep === 'submitting' || registrationStep === 'waiting') {
+        e.preventDefault();
+        const confirmLeave = window.confirm('注册正在进行中，返回可能导致注册失败。确定要返回吗？');
+        if (!confirmLeave) {
+          // 推回当前页面到历史记录
+          window.history.pushState(null, '', window.location.href);
+        }
+      }
+    };
+
+    if (registrationStep === 'submitting' || registrationStep === 'waiting') {
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      window.addEventListener('popstate', handlePopState);
+      
+      // 推入一个状态以防止后退
+      window.history.pushState(null, '', window.location.href);
+    }
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [registrationStep]);
 
   const handleRegister = async () => {
     if (!isConnected) {
@@ -416,10 +485,26 @@ export default function RegisterPage() {
 
                   {/* 当前步骤说明 */}
                   <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FaLock className="w-4 h-4 text-blue-600" />
+                      <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                        注册进行中 - 请勿离开此页面
+                      </p>
+                    </div>
                     <p className="text-sm text-blue-800 dark:text-blue-200">
                       {registrationStep === 'submitting' && '请在钱包中批准注册交易和保证金存入交易...'}
-                      {registrationStep === 'waiting' && '交易已提交，正在等待区块链确认...'}
-                      {registrationStep === 'success' && '注册成功！正在为您跳转到主页...'}
+                      {registrationStep === 'waiting' && (
+                        <>
+                          正在等待交易确认中...
+                          <br />
+                          <span className="text-xs">
+                            • 注册交易: {isRegisterSuccess ? '✅ 已确认' : '⏳ 等待确认...'}
+                            <br />
+                            • 保证金交易: {isDepositSuccess ? '✅ 已确认' : '⏳ 等待确认...'}
+                          </span>
+                        </>
+                      )}
+                      {registrationStep === 'success' && '✅ 所有交易都已确认！正在为您跳转到主页...'}
                     </p>
                   </div>
                 </div>
@@ -532,31 +617,6 @@ export default function RegisterPage() {
                 设置保证金
               </h3>
               
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
-                <div className="flex items-start gap-3">
-                  <FaInfoCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1">
-                      保证金说明
-                    </h4>
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      {userType === 'enterprise' 
-                        ? '企业保证金用于承担违规风险，最小金额较高以确保企业责任。'
-                        : userType === 'dao' 
-                          ? 'DAO组织成员保证金用于防止恶意投诉，金额相对较高。'
-                          : '用户保证金用于防止恶意投诉，金额相对较低。'
-                      }
-                    </p>
-                    <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
-                      最小保证金: {minDeposit ? parseFloat(minDeposit) : 0} ETH
-                    </p>
-                    <p className="text-sm text-blue-700 dark:text-blue-200 mt-2 font-medium">
-                      💡 提示：请确保账户有足够余额支付保证金和gas费用（建议额外准备0.01 ETH作为gas费）
-                    </p>
-                  </div>
-                </div>
-              </div>
-
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   保证金金额 (ETH)
@@ -581,8 +641,12 @@ export default function RegisterPage() {
             {/* 提交按钮 */}
             <button
               onClick={handleRegister}
-              disabled={registrationStep !== 'form' || !depositAmount}
-              className="btn btn-primary w-full py-4"
+              disabled={registrationStep !== 'form' || !depositAmount || isSubmitting}
+              className={`btn w-full py-4 ${
+                registrationStep !== 'form' || !depositAmount || isSubmitting
+                  ? 'opacity-50 cursor-not-allowed bg-gray-400' 
+                  : 'btn-primary'
+              }`}
             >
               {registrationStep === 'submitting' ? (
                 <div className="flex items-center justify-center gap-2">
@@ -592,7 +656,7 @@ export default function RegisterPage() {
               ) : registrationStep === 'waiting' ? (
                 <div className="flex items-center justify-center gap-2">
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  等待交易确认...
+                  等待交易确认中...
                 </div>
               ) : registrationStep === 'success' ? (
                 <div className="flex items-center justify-center gap-2">
@@ -600,9 +664,56 @@ export default function RegisterPage() {
                   注册成功！正在跳转...
                 </div>
               ) : (
-                `注册为${userType === 'enterprise' ? '企业' : userType === 'dao' ? 'DAO组织成员' : '投诉者'}`
+                <div className="flex items-center justify-center gap-2">
+                  <FaShieldAlt className="w-5 h-5" />
+                  {`注册为${userType === 'enterprise' ? '企业' : userType === 'dao' ? 'DAO组织成员' : '投诉者'}`}
+                </div>
               )}
             </button>
+
+                         {/* 注册进行中的警告 */}
+             {(registrationStep === 'submitting' || registrationStep === 'waiting') && (
+               <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                 <div className="flex items-center gap-3">
+                   <FaLock className="w-5 h-5 text-yellow-600" />
+                   <div>
+                     <h4 className="font-medium text-yellow-900 dark:text-yellow-100 mb-1">
+                       重要提醒
+                     </h4>
+                     <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                       注册过程正在进行中，请不要关闭浏览器或离开此页面。
+                       所有交易完成后将自动跳转到首页。
+                     </p>
+                   </div>
+                 </div>
+               </div>
+             )}
+
+            {/* 保证金说明 */}
+            <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <FaInfoCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1">
+                    保证金说明
+                  </h4>
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    {userType === 'enterprise' 
+                      ? '企业保证金用于承担违规风险，最小金额较高以确保企业责任。'
+                      : userType === 'dao' 
+                        ? 'DAO组织成员保证金用于防止恶意投诉，金额相对较高。'
+                        : '用户保证金用于防止恶意投诉，金额相对较低。'
+                    }
+                  </p>
+                  <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
+                    最小保证金: {minDeposit ? parseFloat(minDeposit) : 0} ETH
+                  </p>
+                  <p className="text-sm text-blue-700 dark:text-blue-200 mt-2 font-medium">
+                    💡 提示：请确保账户有足够余额支付保证金和gas费用（建议额外准备0.01 ETH作为gas费）
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* 注意事项 */}
             <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">

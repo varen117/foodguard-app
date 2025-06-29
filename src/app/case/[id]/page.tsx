@@ -23,6 +23,7 @@ import {
 } from "@/constants";
 import TransactionStatus from "@/components/TransactionStatus";
 import { useQueryClient } from "@tanstack/react-query";
+import { useConfirmTransactionAndRefreshData, useForceRefreshData } from "@/hooks/useContractInteraction";
 
 interface EvidenceInfo {
   hash: string;
@@ -65,6 +66,9 @@ export default function CaseDetailPage() {
   const chainId = useChainId();
   const caseId = parseInt(params.id as string);
   const queryClient = useQueryClient();
+  
+  // 交易确认和数据刷新
+  const { mutate: confirmTransactionAndRefresh } = useConfirmTransactionAndRefreshData();
   
   const [caseInfo, setCaseInfo] = useState<CaseInfo | null>(null);
   const [evidences, setEvidences] = useState<EvidenceInfo[]>([]);
@@ -677,30 +681,47 @@ export default function CaseDetailPage() {
                   onSuccess={(receipt) => {
                     console.log('交易确认成功:', receipt);
                     
-                    if (currentTxType === 'vote') {
-                      setIsVoting(false);
-                      alert("投票提交成功！");
-                    } else if (currentTxType === 'challenge') {
-                      setIsChallenging(false);
-                      alert("质疑提交成功！");
+                    // 使用新的确认和数据刷新逻辑
+                    if (currentTxHash && currentTxType) {
+                      const operationText = currentTxType === 'vote' ? '投票' : '质疑';
+                      
+                      confirmTransactionAndRefresh({
+                        hash: currentTxHash,
+                        description: operationText,
+                        type: currentTxType
+                      }, {
+                        onSuccess: () => {
+                          console.log(`${operationText}操作完成，数据已更新`);
+                          
+                          // 清理UI状态
+                          if (currentTxType === 'vote') {
+                            setIsVoting(false);
+                          } else if (currentTxType === 'challenge') {
+                            setIsChallenging(false);
+                          }
+                          
+                          // 重新加载案件信息
+                          loadCaseDetails();
+                          
+                          // 清理状态
+                          setCurrentTxHash(undefined);
+                          setCurrentTxType(undefined);
+                          setShowTransactionStatus(false);
+                        },
+                        onError: (error) => {
+                          console.error('数据刷新失败:', error);
+                          // 即使数据刷新失败，也要清理UI状态
+                          if (currentTxType === 'vote') {
+                            setIsVoting(false);
+                          } else if (currentTxType === 'challenge') {
+                            setIsChallenging(false);
+                          }
+                          setCurrentTxHash(undefined);
+                          setCurrentTxType(undefined);
+                          setShowTransactionStatus(false);
+                        }
+                      });
                     }
-                    
-                    // 刷新相关查询缓存以更新UI数据
-                    queryClient.invalidateQueries({ queryKey: ['caseInfo'] });
-                    queryClient.invalidateQueries({ queryKey: ['votingSession'] });
-                    queryClient.invalidateQueries({ queryKey: ['challengeSession'] });
-                    queryClient.invalidateQueries({ queryKey: ['cases'] });
-                    queryClient.invalidateQueries({ queryKey: ['activeCases'] });
-                    queryClient.invalidateQueries({ queryKey: ['userStats'] });
-                    queryClient.invalidateQueries({ queryKey: ['userCases'] });
-                    
-                    // 重新加载案件信息
-                    loadCaseDetails();
-                    
-                    // 清理状态
-                    setCurrentTxHash(undefined);
-                    setCurrentTxType(undefined);
-                    setShowTransactionStatus(false);
                   }}
                   onError={(error) => {
                     console.error('交易确认失败:', error);

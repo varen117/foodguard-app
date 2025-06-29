@@ -9,7 +9,7 @@ import { useAccount, useChainId } from "wagmi";
 import { FaPlus, FaMinus, FaUpload, FaInfoCircle, FaExclamationTriangle, FaShieldAlt } from "react-icons/fa";
 import { InputField } from "@/components/ui/InputField";
 import { RiskLevel } from "@/constants";
-import { useUserRegistration, useCreateComplaint, useSystemConfig } from "@/hooks/useContractInteraction";
+import { useUserRegistration, useCreateComplaint, useSystemConfig, useConfirmTransactionAndRefreshData, useForceRefreshData } from "@/hooks/useContractInteraction";
 import { Toaster, toast } from "react-hot-toast";
 import TransactionStatus from "@/components/TransactionStatus";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,6 +50,9 @@ export default function ComplaintPage() {
   
   // TODO: 合约接口 - 创建投诉功能
   const { mutate: createComplaint, isPending: isSubmitting } = useCreateComplaint();
+  
+  // 交易确认和数据刷新
+  const { mutate: confirmTransactionAndRefresh } = useConfirmTransactionAndRefreshData();
 
   useEffect(() => {
     // 检查用户注册状态，如果已连接钱包但未注册，直接跳转到注册页面
@@ -395,19 +398,34 @@ export default function ComplaintPage() {
                       chainId={chainId}
                       onSuccess={(receipt) => {
                         console.log('投诉交易确认成功:', receipt);
-                        toast.success("🎉 投诉创建成功！", { duration: 5000 });
                         
-                        // 刷新相关查询缓存以更新UI数据
-                        queryClient.invalidateQueries({ queryKey: ['cases'] });
-                        queryClient.invalidateQueries({ queryKey: ['totalCases'] });
-                        queryClient.invalidateQueries({ queryKey: ['activeCases'] });
-                        queryClient.invalidateQueries({ queryKey: ['userStats'] });
-                        queryClient.invalidateQueries({ queryKey: ['userCases'] });
-                        
-                        // 延迟跳转到案件列表页面
-                        setTimeout(() => {
-                          router.push('/cases');
-                        }, 3000);
+                        // 使用新的确认和数据刷新逻辑
+                        if (txHash) {
+                          confirmTransactionAndRefresh({
+                            hash: txHash,
+                            description: '创建投诉',
+                            type: 'complaint'
+                          }, {
+                            onSuccess: () => {
+                              console.log('投诉创建完成，数据已更新');
+                              
+                              // 清理状态
+                              setShowTransactionStatus(false);
+                              setTxHash(undefined);
+                              
+                              // 延迟跳转到案件列表页面
+                              setTimeout(() => {
+                                router.push('/cases');
+                              }, 3000);
+                            },
+                            onError: (error) => {
+                              console.error('数据刷新失败:', error);
+                              // 即使数据刷新失败，也要清理UI状态
+                              setShowTransactionStatus(false);
+                              setTxHash(undefined);
+                            }
+                          });
+                        }
                       }}
                       onError={(error) => {
                         console.error('投诉交易确认失败:', error);

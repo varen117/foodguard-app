@@ -25,7 +25,7 @@ export function useContractAddresses() {
   return chainsToFoodGuard[chainId] || null;
 }
 
-// Hook: 检查用户注册状态
+// Hook: 检查用户注册状态（优化实时性）
 export function useUserRegistration() {
   const { address } = useAccount();
   const contracts = useContractAddresses();
@@ -37,6 +37,11 @@ export function useUserRegistration() {
     args: address ? [address] : undefined,
     query: {
       enabled: !!contracts && !!address,
+      staleTime: 5 * 1000, // 5秒内认为数据是新鲜的
+      cacheTime: 30 * 1000, // 30秒保留在缓存中
+      refetchOnMount: true, // 组件挂载时重新获取
+      refetchOnWindowFocus: true, // 窗口获得焦点时重新获取
+      refetchInterval: 10 * 1000, // 每10秒自动刷新一次
     },
   });
 
@@ -47,6 +52,10 @@ export function useUserRegistration() {
     args: address ? [address] : undefined,
     query: {
       enabled: !!contracts && !!address && isRegistered,
+      staleTime: 5 * 1000,
+      cacheTime: 30 * 1000,
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
     },
   });
 
@@ -371,6 +380,106 @@ export function useWithdrawFunds() {
       } else {
         toast.error(`提取失败: ${error.message}`);
       }
+    },
+  });
+}
+
+// Hook: 等待交易确认并强制刷新最新数据
+export function useConfirmTransactionAndRefreshData() {
+  const forceRefresh = useForceRefreshData();
+
+  return useMutation({
+    mutationFn: async (params: {
+      hash: `0x${string}`;
+      description: string;
+      type: 'deposit' | 'withdraw' | 'register' | 'complaint' | 'vote' | 'challenge';
+    }) => {
+      const { hash, description, type } = params;
+      
+      console.log('等待交易确认并强制刷新数据...', { hash, description, type });
+      
+      // 验证交易哈希格式
+      if (!hash || !hash.startsWith('0x')) {
+        throw new Error("交易哈希格式错误");
+      }
+      
+      // 等待足够的时间确保交易被确认和数据更新
+      console.log('等待交易确认...');
+      await new Promise(resolve => setTimeout(resolve, 5000)); // 增加等待时间到5秒
+      
+      console.log('交易确认完成，准备刷新数据');
+      return { hash, description, type };
+    },
+    onSuccess: ({ description, type }) => {
+      console.log(`${description}成功，开始强制刷新数据...`);
+      
+      // 使用强制刷新数据hook
+      forceRefresh.mutate({
+        type,
+        description
+      });
+    },
+    onError: (error) => {
+      toast.error(`❌ 交易确认失败: ${error.message}`);
+    },
+  });
+}
+
+// Hook: 强制重新获取最新数据
+export function useForceRefreshData() {
+  const { address } = useAccount();
+  const contracts = useContractAddresses();
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (params: {
+      type: 'deposit' | 'withdraw' | 'register' | 'complaint' | 'vote' | 'challenge';
+      description: string;
+    }) => {
+      const { type, description } = params;
+      
+      console.log(`开始强制刷新${description}相关数据...`, { type });
+      
+      // 完全清除缓存并重置查询
+      queryClient.clear();
+      
+      // 等待一下让清除完成
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // 强制重新创建查询
+      if (type === 'deposit' || type === 'withdraw') {
+        queryClient.resetQueries({ queryKey: ['userDeposit'] });
+        queryClient.resetQueries({ queryKey: ['userStats'] });
+      } else if (type === 'register') {
+        queryClient.resetQueries({ queryKey: ['userRegistration'] });
+        queryClient.resetQueries({ queryKey: ['userDeposit'] });
+        queryClient.resetQueries({ queryKey: ['userStats'] });
+      } else if (type === 'complaint') {
+        queryClient.resetQueries({ queryKey: ['cases'] });
+        queryClient.resetQueries({ queryKey: ['totalCases'] });
+        queryClient.resetQueries({ queryKey: ['activeCases'] });
+        queryClient.resetQueries({ queryKey: ['userStats'] });
+        queryClient.resetQueries({ queryKey: ['userCases'] });
+      } else if (type === 'vote' || type === 'challenge') {
+        queryClient.resetQueries({ queryKey: ['votingSession'] });
+        queryClient.resetQueries({ queryKey: ['challengeSession'] });
+        queryClient.resetQueries({ queryKey: ['caseInfo'] });
+        queryClient.resetQueries({ queryKey: ['userStats'] });
+        queryClient.resetQueries({ queryKey: ['userCases'] });
+      }
+      
+      console.log(`${description}数据刷新完成`);
+      return { type, description };
+    },
+    onSuccess: ({ description }) => {
+      console.log(`${description}数据已完全重新加载`);
+      toast.success(`🎉 ${description}成功！数据已完全更新`, {
+        duration: 5000,
+      });
+    },
+    onError: (error) => {
+      console.error('数据刷新失败:', error);
+      toast.error(`数据更新失败: ${error.message}`);
     },
   });
 }

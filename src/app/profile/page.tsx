@@ -17,9 +17,12 @@ import {
   useUserRegistration, 
   useUserDeposit,
   useDepositFunds,
-  useWithdrawFunds
+  useWithdrawFunds,
+  useConfirmTransactionAndRefreshData,
+  useForceRefreshData
 } from "@/hooks/useContractInteraction";
 import TransactionStatus from "@/components/TransactionStatus";
+import ForceRefreshButton from "@/components/ForceRefreshButton";
 import { useUserStats, useUserCases } from '@/hooks/useDatabase';
 import { 
   CaseInfo,
@@ -110,6 +113,9 @@ export default function ProfilePage() {
   // 合约接口 - 保证金操作
   const { mutate: depositFunds, isPending: isDepositing } = useDepositFunds();
   const { mutate: withdrawFunds, isPending: isWithdrawing } = useWithdrawFunds();
+  
+  // 交易确认和数据刷新
+  const { mutate: confirmTransactionAndRefresh } = useConfirmTransactionAndRefreshData();
 
   // 数据库查询 - 获取用户统计信息
   const { data: userStatsData, isLoading: isStatsLoading } = useUserStats(address);
@@ -636,6 +642,11 @@ export default function ProfilePage() {
                       <FaMinus className="w-4 h-4 mr-2" />
                       提取保证金
                     </button>
+                    <ForceRefreshButton
+                      type="deposit"
+                      description="保证金数据"
+                      className="btn btn-outline btn-sm"
+                    />
                   </div>
                 </div>
                 
@@ -693,20 +704,42 @@ export default function ProfilePage() {
                       onSuccess={(receipt) => {
                         console.log('保证金操作确认成功:', receipt);
                         
-                        if (currentOperationType === 'deposit') {
-                          setShowDepositModal(false);
-                          setDepositAmount("");
-                          toast.success("🎉 保证金存入成功！", { duration: 5000 });
-                        } else if (currentOperationType === 'withdraw') {
-                          setShowWithdrawModal(false);
-                          setWithdrawAmount("");
-                          toast.success("🎉 保证金提取成功！", { duration: 5000 });
+                        // 使用新的确认和数据刷新逻辑
+                        if (currentTransactionHash && currentOperationType) {
+                          const operationText = currentOperationType === 'deposit' ? '存入保证金' : '提取保证金';
+                          
+                          confirmTransactionAndRefresh({
+                            hash: currentTransactionHash,
+                            description: operationText,
+                            type: currentOperationType
+                          }, {
+                            onSuccess: () => {
+                              console.log(`${operationText}操作完成，数据已更新`);
+                              
+                              // 清理UI状态
+                              if (currentOperationType === 'deposit') {
+                                setShowDepositModal(false);
+                                setDepositAmount("");
+                              } else if (currentOperationType === 'withdraw') {
+                                setShowWithdrawModal(false);
+                                setWithdrawAmount("");
+                              }
+                              
+                              setTransactionStep('idle');
+                              setCurrentTransactionHash(undefined);
+                              setCurrentOperationType(undefined);
+                              setShowTransactionStatus(false);
+                            },
+                            onError: (error) => {
+                              console.error('数据刷新失败:', error);
+                              // 即使数据刷新失败，也要清理UI状态
+                              setTransactionStep('idle');
+                              setCurrentTransactionHash(undefined);
+                              setCurrentOperationType(undefined);
+                              setShowTransactionStatus(false);
+                            }
+                          });
                         }
-                        
-                        setTransactionStep('idle');
-                        setCurrentTransactionHash(undefined);
-                        setCurrentOperationType(undefined);
-                        setShowTransactionStatus(false);
                       }}
                       onError={(error) => {
                         console.error('保证金操作确认失败:', error);

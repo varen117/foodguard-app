@@ -6,14 +6,17 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useAccount, useChainId } from "wagmi";
-import { FaShieldAlt, FaHome, FaPlus, FaEye, FaUsers, FaGavel, FaChartLine, FaVoteYea } from "react-icons/fa";
+import { FaShieldAlt, FaHome, FaPlus, FaEye, FaUsers, FaGavel, FaChartLine, FaVoteYea, FaSync } from "react-icons/fa";
 import { CaseStatus, RiskLevel, getStatusText, getRiskLevelText, getStatusColor, getRiskLevelColor } from "@/constants";
 import { useUserRegistration, useActiveCases, useTotalCases } from "@/hooks/useContractInteraction";
-import { Toaster } from "react-hot-toast";
+import { Toaster, toast } from "react-hot-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import ForceRefreshButton from "@/components/ForceRefreshButton";
 
 export default function HomePage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const queryClient = useQueryClient();
   
   // TODO: 合约接口 - 获取用户注册状态和信息
   const { isRegistered: isUserRegistered, userInfo } = useUserRegistration();
@@ -23,6 +26,21 @@ export default function HomePage() {
   
   // TODO: 合约接口 - 获取案件总数
   const totalCases = useTotalCases();
+
+  // 强制刷新注册状态
+  const handleRefreshRegistrationStatus = async () => {
+    console.log('手动刷新注册状态...');
+    toast.success("正在刷新注册状态...", { duration: 2000 });
+    
+    // 清除所有缓存并重新获取
+    queryClient.clear();
+    await new Promise(resolve => setTimeout(resolve, 300));
+    queryClient.refetchQueries();
+    
+    setTimeout(() => {
+      toast.success("注册状态已刷新！", { duration: 3000 });
+    }, 1000);
+  };
 
 
 
@@ -65,9 +83,23 @@ export default function HomePage() {
             
             {!isUserRegistered ? (
               <div className="space-y-6">
-                <p className="text-white mb-8 text-lg font-medium">
-                  您尚未注册，请选择注册类型：
-                </p>
+                <div className="flex flex-col items-center space-y-4">
+                  <p className="text-white mb-4 text-lg font-medium">
+                    您尚未注册，请选择注册类型：
+                  </p>
+                  <div className="flex items-center space-x-3">
+                    <p className="text-sm text-white/80">
+                      刚完成注册？
+                    </p>
+                    <button
+                      onClick={handleRefreshRegistrationStatus}
+                      className="flex items-center space-x-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white text-sm"
+                    >
+                      <FaSync className="w-3 h-3" />
+                      <span>刷新状态</span>
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
                   <Link 
                     href="/register?type=user" 
@@ -93,21 +125,30 @@ export default function HomePage() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link 
-                  href="/complaint" 
-                  className="btn btn-primary"
-                >
-                  <FaPlus className="w-4 h-4 mr-2" />
-                  创建投诉
-                </Link>
-                <Link 
-                  href="/cases" 
-                  className="btn btn-secondary"
-                >
-                  <FaEye className="w-4 h-4 mr-2" />
-                  查看案件
-                </Link>
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Link 
+                    href="/complaint" 
+                    className="btn btn-primary"
+                  >
+                    <FaPlus className="w-4 h-4 mr-2" />
+                    创建投诉
+                  </Link>
+                  <Link 
+                    href="/cases" 
+                    className="btn btn-secondary"
+                  >
+                    <FaEye className="w-4 h-4 mr-2" />
+                    查看案件
+                  </Link>
+                </div>
+                <div className="flex justify-center">
+                  <ForceRefreshButton 
+                    onRefresh={handleRefreshRegistrationStatus}
+                    buttonText="刷新数据"
+                    size="sm"
+                  />
+                </div>
               </div>
             )}
           </div>
