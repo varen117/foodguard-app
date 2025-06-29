@@ -36,12 +36,13 @@ export function useUserRegistration() {
     functionName: 'isRegistered',
     args: address ? [address] : undefined,
     query: {
+      queryKey: ['userRegistration', 'isRegistered', address],
       enabled: !!contracts && !!address,
-      staleTime: 5 * 1000, // 5秒内认为数据是新鲜的
-      cacheTime: 30 * 1000, // 30秒保留在缓存中
+      staleTime: 1 * 1000, // 1秒内认为数据是新鲜的，减少缓存时间
+      gcTime: 30 * 1000, // 30秒保留在缓存中
       refetchOnMount: true, // 组件挂载时重新获取
       refetchOnWindowFocus: true, // 窗口获得焦点时重新获取
-      refetchInterval: 10 * 1000, // 每10秒自动刷新一次
+      refetchInterval: 5 * 1000, // 减少到每5秒自动刷新一次，提高实时性
     },
   });
 
@@ -51,11 +52,13 @@ export function useUserRegistration() {
     functionName: 'getUserInfo',
     args: address ? [address] : undefined,
     query: {
+      queryKey: ['userRegistration', 'userInfo', address],
       enabled: !!contracts && !!address && isRegistered,
-      staleTime: 5 * 1000,
-      cacheTime: 30 * 1000,
+      staleTime: 1 * 1000,
+      gcTime: 30 * 1000,
       refetchOnMount: true,
       refetchOnWindowFocus: true,
+      refetchInterval: 5 * 1000,
     },
   });
 
@@ -231,7 +234,7 @@ export function useWaitForTransactionWithToast() {
         duration: 5000,
       });
       
-      // 刷新相关查询
+      // 刷新相关查询 - 使用通配符模式刷新所有相关查询
       queryClient.invalidateQueries({ queryKey: ['userRegistration'] });
       queryClient.invalidateQueries({ queryKey: ['userDeposit'] });
     },
@@ -252,7 +255,13 @@ export function useUserDeposit() {
     functionName: 'getAvailableDeposit',
     args: address ? [address] : undefined,
     query: {
+      queryKey: ['userDeposit', 'available', address],
       enabled: !!contracts && !!address,
+      staleTime: 1 * 1000,
+      gcTime: 30 * 1000,
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+      refetchInterval: 5 * 1000,
     },
   });
 
@@ -262,7 +271,13 @@ export function useUserDeposit() {
     functionName: 'getUserDepositStatus',
     args: address ? [address] : undefined,
     query: {
+      queryKey: ['userDeposit', 'status', address],
       enabled: !!contracts && !!address,
+      staleTime: 1 * 1000,
+      gcTime: 30 * 1000,
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+      refetchInterval: 5 * 1000,
     },
   });
 
@@ -451,9 +466,9 @@ export function useForceRefreshData() {
         queryClient.resetQueries({ queryKey: ['userDeposit'] });
         queryClient.resetQueries({ queryKey: ['userStats'] });
       } else if (type === 'register') {
-        queryClient.resetQueries({ queryKey: ['userRegistration'] });
-        queryClient.resetQueries({ queryKey: ['userDeposit'] });
-        queryClient.resetQueries({ queryKey: ['userStats'] });
+        queryClient.invalidateQueries({ queryKey: ['userRegistration'] });
+        queryClient.invalidateQueries({ queryKey: ['userDeposit'] });
+        queryClient.invalidateQueries({ queryKey: ['userStats'] });
       } else if (type === 'complaint') {
         queryClient.resetQueries({ queryKey: ['cases'] });
         queryClient.resetQueries({ queryKey: ['totalCases'] });
@@ -512,7 +527,7 @@ export function useWaitForSingleTransaction() {
         duration: 5000,
       });
       
-      // 刷新相关查询
+      // 刷新相关查询 - 使用通配符模式刷新所有相关查询
       queryClient.invalidateQueries({ queryKey: ['userDeposit'] });
       queryClient.invalidateQueries({ queryKey: ['userRegistration'] });
     },
@@ -659,11 +674,13 @@ export function useActiveCases() {
     address: contracts?.foodSafetyGovernance as `0x${string}`,
     functionName: 'getActiveCaseInfos',
     query: {
+      queryKey: ['activeCases'],
       enabled: !!contracts && !!contracts.foodSafetyGovernance,
       retry: 1, // 减少重试次数
       refetchOnWindowFocus: false, // 防止窗口聚焦时重新请求
       refetchOnMount: false, // 防止每次挂载时重新请求
       staleTime: 1000 * 60 * 2, // 2分钟内不重新请求
+      gcTime: 1000 * 60 * 5, // 5分钟后清除缓存
     },
   });
 
@@ -700,11 +717,13 @@ export function useTotalCases() {
     address: contracts?.foodSafetyGovernance as `0x${string}`,
     functionName: 'getTotalCases',
     query: {
+      queryKey: ['totalCases'],
       enabled: !!contracts && !!contracts.foodSafetyGovernance,
       retry: 1, // 减少重试次数
       refetchOnWindowFocus: false, // 防止窗口聚焦时重新请求
       refetchOnMount: false, // 防止每次挂载时重新请求
       staleTime: 1000 * 60 * 5, // 5分钟内不重新请求
+      gcTime: 1000 * 60 * 10, // 10分钟后清除缓存
     },
   });
 

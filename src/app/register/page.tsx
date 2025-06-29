@@ -120,29 +120,26 @@ export default function RegisterPage() {
         duration: 5000,
       });
       
-      // 强制刷新所有查询缓存以更新UI数据
+      // 强制刷新用户注册状态数据
       const refreshData = async () => {
         console.log('开始强制刷新注册状态数据...');
         
-        // 完全清除所有缓存
-        queryClient.clear();
+        // 使用精确的查询键刷新用户注册相关数据
+        await queryClient.invalidateQueries({ queryKey: ['userRegistration'] });
+        await queryClient.invalidateQueries({ queryKey: ['userDeposit'] });
         
-        // 等待缓存清除完成
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // 等待数据刷新
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // 手动触发重新获取用户注册状态
-        queryClient.refetchQueries();
+        console.log('注册状态数据刷新完成，准备跳转到首页...');
+        toast.success("🏠 注册完成！正在跳转到首页...", {
+          duration: 2000,
+        });
         
-        console.log('注册状态数据刷新完成');
-        
-        // 等待数据刷新完成后再跳转
+        // 跳转到首页
         setTimeout(() => {
-          console.log('准备跳转到首页...');
-          toast.success("🏠 正在跳转到首页，如果状态未更新请点击刷新按钮", {
-            duration: 3000,
-          });
           router.push('/');
-        }, 3000); // 增加等待时间到3秒
+        }, 1000);
       };
       
       refreshData();

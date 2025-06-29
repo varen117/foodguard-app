@@ -11,7 +11,7 @@ import { CaseStatus, RiskLevel, getStatusText, getRiskLevelText, getStatusColor,
 import { useUserRegistration, useActiveCases, useTotalCases } from "@/hooks/useContractInteraction";
 import { Toaster, toast } from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import ForceRefreshButton from "@/components/ForceRefreshButton";
+import SimpleRefreshButton from "@/components/SimpleRefreshButton";
 
 export default function HomePage() {
   const { address, isConnected } = useAccount();
@@ -32,14 +32,16 @@ export default function HomePage() {
     console.log('手动刷新注册状态...');
     toast.success("正在刷新注册状态...", { duration: 2000 });
     
-    // 清除所有缓存并重新获取
-    queryClient.clear();
-    await new Promise(resolve => setTimeout(resolve, 300));
-    queryClient.refetchQueries();
+    // 使用精确的查询键刷新用户注册相关数据
+    await queryClient.invalidateQueries({ queryKey: ['userRegistration'] });
+    await queryClient.invalidateQueries({ queryKey: ['userDeposit'] });
+    await queryClient.invalidateQueries({ queryKey: ['activeCases'] });
+    await queryClient.invalidateQueries({ queryKey: ['totalCases'] });
     
-    setTimeout(() => {
-      toast.success("注册状态已刷新！", { duration: 3000 });
-    }, 1000);
+    // 等待数据刷新
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    toast.success("注册状态已刷新！", { duration: 3000 });
   };
 
 
@@ -143,10 +145,10 @@ export default function HomePage() {
                   </Link>
                 </div>
                 <div className="flex justify-center">
-                  <ForceRefreshButton 
+                  <SimpleRefreshButton 
                     onRefresh={handleRefreshRegistrationStatus}
                     buttonText="刷新数据"
-                    size="sm"
+                    className="btn btn-outline btn-sm"
                   />
                 </div>
               </div>

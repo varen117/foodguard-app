@@ -42,11 +42,11 @@ export const chainsToFoodGuard: Record<number, {
   rewardPunishmentManager: string;
 }> = {
   31337: {
-    foodSafetyGovernance: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9", // Anvil 本地网络 - FoodSafetyGovernance
-    participantPoolManager: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // ParticipantPoolManager
-    fundManager: "0x5FbDB2315678afecb367f032d93F642f64180aa3", // FundManager  
-    votingDisputeManager: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9", // VotingDisputeManager
-    rewardPunishmentManager: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0", // RewardPunishmentManager
+    foodSafetyGovernance: "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707", // FoodSafetyGovernance
+    participantPoolManager: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0", // ParticipantPoolManager
+    fundManager: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // FundManager
+    votingDisputeManager: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9", // VotingDisputeManager
+    rewardPunishmentManager: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9", // RewardPunishmentManager
   },
   // 可以添加其他网络的合约地址
 };
