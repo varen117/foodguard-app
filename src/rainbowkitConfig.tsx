@@ -11,11 +11,6 @@ const localChain = {
     default: { http: ['http://127.0.0.1:8545'] },
     public: { http: ['http://127.0.0.1:8545'] },
   },
-  // 添加Gas价格优化
-  fees: {
-    maxFeePerGas: BigInt(10), // 10 wei
-    maxPriorityFeePerGas: BigInt(1), // 1 wei
-  }
 };
 
 export const config = getDefaultConfig({

@@ -1,27 +1,27 @@
 /**
  * FoodGuard 合约常量和 ABI 定义
- * 
+ *
  * 数据交互规范说明：
- * 
+ *
  * 1. 合约数据（链上）- 使用 useReadContract 和 useWriteContract
  *    - 用户注册状态、角色信息
  *    - 案件基本信息（CaseInfo）
  *    - 投票结果和状态
  *    - 保证金余额和状态
  *    - 系统配置参数
- * 
+ *
  * 2. 数据库数据（链下）- 使用 API 调用
  *    - 用户详细资料（姓名、联系方式、头像等）
  *    - 证据文件详情和元数据
  *    - 用户操作日志和活动记录
  *    - 通知消息和提醒
  *    - 缓存数据用于提升性能
- * 
+ *
  * 3. 混合数据 - 需要同时查询合约和数据库
  *    - 案件列表（基本信息来自合约，详细信息来自数据库）
  *    - 用户资料页面（注册状态来自合约，个人信息来自数据库）
  *    - 统计数据（部分来自合约事件，部分来自数据库聚合）
- * 
+ *
  * 所有 TODO 注释格式：
  * - TODO: 合约接口 - functionName(params) 描述
  * - TODO: 数据库查询 - SQL 或描述性说明
@@ -34,19 +34,29 @@
  */
 
 // 合约地址配置
-export const chainsToFoodGuard: Record<number, { 
+export const chainsToFoodGuard: Record<number, {
   foodSafetyGovernance: string;
   participantPoolManager: string;
   fundManager: string;
   votingDisputeManager: string;
   rewardPunishmentManager: string;
 }> = {
+  // 本地开发链 - Anvil (Foundry), Hardhat, Ganache 默认使用 31337 链ID
+  // 注意：在本地链上，应手动设置较低的gas价格，避免MetaMask使用错误的价格估算
   31337: {
-    foodSafetyGovernance: "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707", // FoodSafetyGovernance
-    participantPoolManager: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0", // ParticipantPoolManager
-    fundManager: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // FundManager
-    votingDisputeManager: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9", // VotingDisputeManager
-    rewardPunishmentManager: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9", // RewardPunishmentManager
+    foodSafetyGovernance: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9", // FoodSafetyGovernance
+    participantPoolManager: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // ParticipantPoolManager
+    fundManager: "0x5FbDB2315678afecb367f032d93F642f64180aa3", // FundManager
+    votingDisputeManager: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9", // VotingDisputeManager
+    rewardPunishmentManager: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0", // RewardPunishmentManager
+  },
+  // Hardhat 的默认链ID，添加备用链 ID 以兼容不同的本地开发环境
+  1337: {
+    foodSafetyGovernance: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+    participantPoolManager: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+    fundManager: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    votingDisputeManager: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+    rewardPunishmentManager: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
   },
   // 可以添加其他网络的合约地址
 };
@@ -627,4 +637,4 @@ export const getStatusColor = (status: CaseStatus): string => {
 // 合约地址查找函数
 export const getContractAddresses = (chainId: number) => {
   return chainsToFoodGuard[chainId] || null;
-}; 
+};

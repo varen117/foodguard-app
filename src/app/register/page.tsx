@@ -3,24 +3,22 @@
  */
 "use client"
 
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useAccount, useChainId, useWaitForTransactionReceipt } from "wagmi";
-import { formatEther } from "viem";
-import { FaUser, FaBuilding, FaShieldAlt, FaInfoCircle, FaUsers, FaRocket, FaWallet, FaVoteYea, FaLock } from "react-icons/fa";
-import { useUserRegistration, useUserRegister, useSystemConfig } from "@/hooks/useContractInteraction";
-import { Toaster, toast } from "react-hot-toast";
+import {useEffect, useState} from "react";
+import {useRouter, useSearchParams} from "next/navigation";
+import {useAccount, useChainId, useWaitForTransactionReceipt} from "wagmi";
+import {FaBuilding, FaLock, FaRocket, FaShieldAlt, FaUser, FaUsers, FaVoteYea, FaWallet} from "react-icons/fa";
+import {useUserRegister, useUserRegistration} from "@/hooks/useContractInteraction";
+import {toast, Toaster} from "react-hot-toast";
 import TransactionStatus from "@/components/TransactionStatus";
-import { useQueryClient } from "@tanstack/react-query";
+import {useQueryClient} from "@tanstack/react-query";
 
 export default function RegisterPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
   const chainId = useChainId();
   const queryClient = useQueryClient();
   const [userType, setUserType] = useState<'complainant' | 'dao' | 'enterprise'>('complainant');
-  const [depositAmount, setDepositAmount] = useState("");
   const [registrationStep, setRegistrationStep] = useState<'form' | 'submitting' | 'waiting' | 'success'>('form');
   const [transactionHashes, setTransactionHashes] = useState<{
     registerHash?: `0x${string}`;
@@ -28,11 +26,10 @@ export default function RegisterPage() {
   }>({});
 
   // 合约接口 - 获取用户注册状态和信息
-  const { isRegistered: isUserRegistered, userInfo } = useUserRegistration();
-  
+  const { isRegistered: isUserRegistered } = useUserRegistration();
+
   // 合约接口 - 获取系统配置信息
-  const systemConfig = useSystemConfig();
-  
+
   // 合约接口 - 用户注册功能
   const { mutate: registerUser, isPending: isSubmitting } = useUserRegister();
 
@@ -48,17 +45,6 @@ export default function RegisterPage() {
     }
   });
 
-  // 等待保证金交易确认
-  const { data: depositReceipt, isSuccess: isDepositSuccess, isError: isDepositError } = useWaitForTransactionReceipt({
-    hash: transactionHashes.depositHash,
-    query: {
-      enabled: !!transactionHashes.depositHash,
-      // 禁用自动代币检测以避免调用symbol()和decimals()
-      refetchOnMount: false,
-      refetchOnWindowFocus: false,
-      structuralSharing: false,
-    }
-  });
 
   useEffect(() => {
     // 从URL参数获取注册类型
@@ -77,25 +63,6 @@ export default function RegisterPage() {
     }
   }, [isConnected, isUserRegistered, registrationStep, router]);
 
-  useEffect(() => {
-    // 设置默认保证金金额
-    if (systemConfig) {
-      let minDeposit: string;
-      
-      if (userType === 'enterprise') {
-        minDeposit = systemConfig.minEnterpriseDeposit;
-      } else if (userType === 'dao') {
-        minDeposit = systemConfig.minDaoDeposit;
-      } else {
-        // 普通用户
-        minDeposit = systemConfig.minComplaintDeposit;
-      }
-      
-      setDepositAmount(minDeposit);
-      console.log('设置默认保证金:', { userType, minDeposit });
-    }
-  }, [systemConfig, userType]);
-
   // 处理交易确认结果 - 只有在两个交易都完全确认且有有效的receipt时才跳转
   useEffect(() => {
     // 严格检查条件：
@@ -103,57 +70,53 @@ export default function RegisterPage() {
     // 2. 两个receipt都存在且有效
     // 3. 当前状态为等待中
     // 4. 两个receipt都有区块号（确认已上链）
-    if (isRegisterSuccess && 
-        isDepositSuccess && 
+    if (isRegisterSuccess &&
         registrationStep === 'waiting' &&
-        registerReceipt && 
-        depositReceipt &&
-        registerReceipt.blockNumber &&
-        depositReceipt.blockNumber) {
-      
+        registerReceipt &&
+        registerReceipt.blockNumber) {
+
       console.log('所有交易都已确认，准备完成注册流程...');
       console.log('注册交易receipt:', registerReceipt);
-      console.log('保证金交易receipt:', depositReceipt);
-      
+
       setRegistrationStep('success');
       toast.success("🎉 注册成功！欢迎加入FoodGuard社区！", {
         duration: 5000,
       });
-      
+
       // 强制刷新用户注册状态数据
       const refreshData = async () => {
         console.log('开始强制刷新注册状态数据...');
-        
+
         // 使用精确的查询键刷新用户注册相关数据
         await queryClient.invalidateQueries({ queryKey: ['userRegistration'] });
         await queryClient.invalidateQueries({ queryKey: ['userDeposit'] });
-        
+
         // 等待数据刷新
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         console.log('注册状态数据刷新完成，准备跳转到首页...');
         toast.success("🏠 注册完成！正在跳转到首页...", {
           duration: 2000,
         });
-        
+
         // 跳转到首页
         setTimeout(() => {
           router.push('/');
         }, 1000);
       };
-      
+
       refreshData();
     }
-  }, [isRegisterSuccess, isDepositSuccess, registerReceipt, depositReceipt, registrationStep, queryClient, router]);
+  }, [isRegisterSuccess, registerReceipt, registrationStep, queryClient, router]);
 
   // 处理交易失败
   useEffect(() => {
-    if ((isRegisterError || isDepositError) && registrationStep === 'waiting') {
+    if ((isRegisterError) && registrationStep === 'waiting') {
       setRegistrationStep('form');
       toast.error("交易确认失败，请重试");
       setTransactionHashes({});
     }
-  }, [isRegisterError, isDepositError, registrationStep]);
+  }, [isRegisterError, registrationStep]);
 
   // 防止用户在注册过程中离开页面
   useEffect(() => {
@@ -179,7 +142,7 @@ export default function RegisterPage() {
     if (registrationStep === 'submitting' || registrationStep === 'waiting') {
       window.addEventListener('beforeunload', handleBeforeUnload);
       window.addEventListener('popstate', handlePopState);
-      
+
       // 推入一个状态以防止后退
       window.history.pushState(null, '', window.location.href);
     }
@@ -196,21 +159,16 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!depositAmount) {
-      toast.error("请输入保证金金额");
-      return;
-    }
-
     setRegistrationStep('submitting');
 
     // 提交注册交易
-    registerUser({ userType, depositAmount }, {
-      onSuccess: ({ registerHash, depositHash }) => {
-        console.log('注册交易已提交:', { registerHash, depositHash });
-        
-        setTransactionHashes({ registerHash, depositHash });
+    registerUser({ userType }, {
+      onSuccess: ({ registerHash }) => {
+        console.log('注册交易已提交:', { registerHash });
+
+        setTransactionHashes({ registerHash });
         setRegistrationStep('waiting');
-        
+
         toast.success("🎉 所有交易已提交！正在等待区块链确认...", {
           duration: 5000,
         });
@@ -218,7 +176,7 @@ export default function RegisterPage() {
       onError: (error) => {
         console.error('注册交易提交失败:', error);
         setRegistrationStep('form');
-        
+
         // 显示具体错误信息
         if (error.message.includes('取消了交易')) {
           toast.error("⚠️ 交易被取消，请重新尝试注册");
@@ -245,10 +203,10 @@ export default function RegisterPage() {
           <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl animate-pulse-glow"></div>
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse-glow" style={{animationDelay: '2s'}}></div>
         </div>
-        
+
         <div className="relative z-10 flex items-center justify-center min-h-screen px-4 py-8">
           <div className="max-w-6xl w-full grid lg:grid-cols-2 gap-8 lg:gap-16 items-center">
-            
+
             {/* 左侧：品牌介绍 */}
             <div className="text-center lg:text-left animate-fade-in-up">
               <div className="flex items-center justify-center lg:justify-start mb-8">
@@ -264,12 +222,12 @@ export default function RegisterPage() {
                   </p>
                 </div>
               </div>
-              
+
               <p className="text-xl text-gray-300 mb-8 leading-relaxed">
                 基于区块链技术的去中心化食品安全投诉与治理系统，
                 构建透明、可信、高效的食品安全监管新生态
               </p>
-              
+
               <div className="space-y-8">
                 <div className="flex items-start gap-4 group">
                   <div className="icon-container flex-shrink-0 w-12 h-12 group-hover:scale-110 transition-transform duration-300">
@@ -280,7 +238,7 @@ export default function RegisterPage() {
                     <p className="text-gray-400 group-hover:text-gray-300 transition-colors duration-300">所有投诉和处理过程上链存储，确保数据不可篡改</p>
                   </div>
                 </div>
-                
+
                 <div className="flex items-start gap-4 group">
                   <div className="icon-container flex-shrink-0 w-12 h-12 group-hover:scale-110 transition-transform duration-300">
                     <FaUsers className="w-6 h-6 text-white" />
@@ -290,7 +248,7 @@ export default function RegisterPage() {
                     <p className="text-gray-400 group-hover:text-gray-300 transition-colors duration-300">社区驱动的治理机制，让每个参与者都有发言权</p>
                   </div>
                 </div>
-                
+
                 <div className="flex items-start gap-4 group">
                   <div className="icon-container flex-shrink-0 w-12 h-12 group-hover:scale-110 transition-transform duration-300">
                     <FaRocket className="w-6 h-6 text-white" />
@@ -302,7 +260,7 @@ export default function RegisterPage() {
                 </div>
               </div>
             </div>
-            
+
             {/* 右侧：连接钱包 */}
             <div className="flex justify-center lg:justify-end animate-fade-in-up-delay">
               <div className="card max-w-md w-full">
@@ -318,7 +276,7 @@ export default function RegisterPage() {
                       连接钱包，注册成为FoodGuard社区的一员
                     </p>
                   </div>
-                  
+
                   <div className="space-y-6">
                     <div className="glass-card p-6 text-center">
                       <h3 className="text-lg font-semibold text-gray-800 mb-4">
@@ -346,7 +304,7 @@ export default function RegisterPage() {
                         {/* ConnectButton 会自动显示在这里 */}
                       </div>
                     </div>
-                    
+
                     <div className="text-center">
                       <p className="text-xs text-gray-500 mb-4">
                         支持的钱包类型
@@ -373,14 +331,6 @@ export default function RegisterPage() {
     );
   }
 
-  const minDeposit = systemConfig 
-    ? (userType === 'enterprise' 
-        ? systemConfig.minEnterpriseDeposit
-        : userType === 'dao' 
-          ? systemConfig.minDaoDeposit
-          : systemConfig.minComplaintDeposit)
-    : "0";
-
   return (
     <div className="main-container py-12">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -393,7 +343,7 @@ export default function RegisterPage() {
               </div>
               <span className="gradient-text">注册FoodGuard账户</span>
             </h1>
-            <p className="text-muted mt-2">
+            <p className="text-gray-500 mt-2">
               选择您的账户类型并完成注册
             </p>
           </div>
@@ -496,8 +446,6 @@ export default function RegisterPage() {
                           <br />
                           <span className="text-xs">
                             • 注册交易: {isRegisterSuccess ? '✅ 已确认' : '⏳ 等待确认...'}
-                            <br />
-                            • 保证金交易: {isDepositSuccess ? '✅ 已确认' : '⏳ 等待确认...'}
                           </span>
                         </>
                       )}
@@ -519,19 +467,6 @@ export default function RegisterPage() {
                         }}
                         onError={(error) => {
                           console.error('注册交易确认失败:', error);
-                        }}
-                      />
-                    )}
-                    {transactionHashes.depositHash && (
-                      <TransactionStatus
-                        txHash={transactionHashes.depositHash}
-                        description="保证金存入"
-                        chainId={chainId}
-                        onSuccess={(receipt) => {
-                          console.log('保证金交易确认成功:', receipt);
-                        }}
-                        onError={(error) => {
-                          console.error('保证金交易确认失败:', error);
                         }}
                       />
                     )}
@@ -608,39 +543,12 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* 保证金设置 */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                设置保证金
-              </h3>
-              
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  保证金金额 (ETH)
-                  <span className="text-red-500 ml-1">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  placeholder={`最小金额: ${minDeposit ? minDeposit : '0'} ETH`}
-                  disabled={registrationStep !== 'form'}
-                  className={`w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${
-                    registrationStep !== 'form' ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                />
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  当前输入: {depositAmount ? parseFloat(depositAmount) : 0} ETH
-                </p>
-              </div>
-            </div>
-
             {/* 提交按钮 */}
             <button
               onClick={handleRegister}
-              disabled={registrationStep !== 'form' || !depositAmount || isSubmitting}
+              disabled={registrationStep !== 'form'  || isSubmitting}
               className={`btn w-full py-4 ${
-                registrationStep !== 'form' || !depositAmount || isSubmitting
+                registrationStep !== 'form' || isSubmitting
                   ? 'opacity-50 cursor-not-allowed bg-gray-400' 
                   : 'btn-primary'
               }`}
@@ -668,7 +576,7 @@ export default function RegisterPage() {
               )}
             </button>
 
-                         {/* 注册进行中的警告 */}
+             {/* 注册进行中的警告 */}
              {(registrationStep === 'submitting' || registrationStep === 'waiting') && (
                <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                  <div className="flex items-center gap-3">
@@ -685,33 +593,6 @@ export default function RegisterPage() {
                  </div>
                </div>
              )}
-
-            {/* 保证金说明 */}
-            <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <FaInfoCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div>
-                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1">
-                    保证金说明
-                  </h4>
-                  <p className="text-sm text-blue-800 dark:text-blue-200">
-                    {userType === 'enterprise' 
-                      ? '企业保证金用于承担违规风险，最小金额较高以确保企业责任。'
-                      : userType === 'dao' 
-                        ? 'DAO组织成员保证金用于防止恶意投诉，金额相对较高。'
-                        : '用户保证金用于防止恶意投诉，金额相对较低。'
-                    }
-                  </p>
-                  <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
-                    最小保证金: {minDeposit ? parseFloat(minDeposit) : 0} ETH
-                  </p>
-                  <p className="text-sm text-blue-700 dark:text-blue-200 mt-2 font-medium">
-                    💡 提示：请确保账户有足够余额支付保证金和gas费用（建议额外准备0.01 ETH作为gas费）
-                  </p>
-                </div>
-              </div>
-            </div>
-
             {/* 注意事项 */}
             <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <h4 className="font-medium text-gray-900 dark:text-white mb-2">
@@ -726,9 +607,9 @@ export default function RegisterPage() {
             </div>
           </div>
         </div>
-        
+
         {/* Toast 通知组件 */}
-        <Toaster 
+        <Toaster
           position="top-right"
           toastOptions={{
             duration: 4000,
@@ -741,4 +622,4 @@ export default function RegisterPage() {
       </div>
     </div>
   );
-} 
+}

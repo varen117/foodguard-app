@@ -3,38 +3,29 @@
  */
 "use client"
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAccount, useChainId, useBalance } from "wagmi";
-import { FaPlus, FaExclamationTriangle, FaShieldAlt } from "react-icons/fa";
-import { InputField } from "@/components/ui/InputField";
-import { DateTimePicker } from "@/components/ui/DateTimePicker";
-import { RiskLevel } from "@/constants";
-import { useUserRegistration, useCreateComplaint, useSystemConfig, useConfirmTransactionAndRefreshData, useForceRefreshData } from "@/hooks/useContractInteraction";
-import { Toaster, toast } from "react-hot-toast";
+import {useEffect, useState} from "react";
+import {useRouter} from "next/navigation";
+import {useAccount, useChainId} from "wagmi";
+import {FaExclamationTriangle, FaPlus, FaShieldAlt} from "react-icons/fa";
+import {InputField} from "@/components/ui/InputField";
+import {DateTimePicker} from "@/components/ui/DateTimePicker";
+import {RiskLevel} from "@/constants";
+import {
+  useConfirmTransactionAndRefreshData,
+  useCreateComplaint,
+  useSystemConfig,
+  useUserRegistration
+} from "@/hooks/useContractInteraction";
+import {toast, Toaster} from "react-hot-toast";
 import TransactionStatus from "@/components/TransactionStatus";
-import { useQueryClient } from "@tanstack/react-query";
 
-interface Evidence {
-  hash: string;
-  type: string;
-  description: string;
-}
 
 export default function ComplaintPage() {
   const router = useRouter();
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
   const chainId = useChainId();
-  const queryClient = useQueryClient();
-  
-  // 获取用户ETH余额
-  const { data: balance } = useBalance({
-    address: address,
-    query: {
-      enabled: !!address,
-    }
-  });
-  
+
+
   // 表单状态
   const [formData, setFormData] = useState({
     enterprise: "",
@@ -44,29 +35,25 @@ export default function ComplaintPage() {
     incidentTime: "",
     riskLevel: "0", // 默认低风险
   });
-  
+
   const [evidenceHash, setEvidenceHash] = useState("");
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [showTransactionStatus, setShowTransactionStatus] = useState(false);
 
   // TODO: 合约接口 - 获取用户注册状态和信息
-  const { isRegistered: isUserRegistered, userInfo } = useUserRegistration();
-  
+  const { isRegistered: isUserRegistered } = useUserRegistration();
+
   // TODO: 合约接口 - 获取系统配置信息
   const systemConfig = useSystemConfig();
-  
+
   // TODO: 合约接口 - 创建投诉功能
   const { mutate: createComplaint, isPending: isSubmitting } = useCreateComplaint();
-  
+
   // 交易确认和数据刷新
   const { mutate: confirmTransactionAndRefresh } = useConfirmTransactionAndRefreshData();
 
   // 计算预估总成本 - 只需要Gas费用，不需要发送ETH
-  const estimatedGasCost = 0.001; // 降低Gas费用预估，因为不发送ETH
-  const totalEstimatedCost = estimatedGasCost; // 只需要Gas费用
-  const userBalance = parseFloat(balance?.formatted || '0');
-  const hasInsufficientFunds = totalEstimatedCost > userBalance;
 
   useEffect(() => {
     // 检查用户注册状态，如果已连接钱包但未注册，直接跳转到注册页面
@@ -86,14 +73,14 @@ export default function ComplaintPage() {
     }
   }, [systemConfig?.minComplaintDeposit]);
 
-  const handleInputChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const value = e.target.value;
-    
+
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
-    
+
     // 清除相关错误
     if (errors[field]) {
       setErrors(prev => ({
@@ -109,7 +96,7 @@ export default function ComplaintPage() {
       ...prev,
       incidentTime: value
     }));
-    
+
     // 清除相关错误
     if (errors.incidentTime) {
       setErrors(prev => ({
@@ -158,11 +145,6 @@ export default function ComplaintPage() {
       newErrors.evidenceHash = "请提供证据哈希或存储链接";
     }
 
-    // 检查余额是否足够支付Gas费用
-    if (hasInsufficientFunds) {
-      newErrors.balance = `余额不足！需要 ${totalEstimatedCost.toFixed(4)} ETH 支付Gas费用，当前余额 ${userBalance.toFixed(4)} ETH`;
-    }
-
     setErrors(newErrors);
     const isValid = Object.keys(newErrors).length === 0;
 
@@ -176,12 +158,6 @@ export default function ComplaintPage() {
 
     if (!isConnected) {
       toast.error("请先连接钱包");
-      return;
-    }
-
-    // 最后检查余额是否足够支付Gas费用
-    if (hasInsufficientFunds) {
-      toast.error(`余额不足！需要至少 ${totalEstimatedCost.toFixed(4)} ETH 支付Gas费用`);
       return;
     }
 
@@ -232,7 +208,7 @@ export default function ComplaintPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+    <div className="main-container py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
           {/* 头部 */}
@@ -247,10 +223,6 @@ export default function ComplaintPage() {
           </div>
 
           <div className="p-8">
-
-
-
-
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* 左侧：基本信息 */}
               <div className="space-y-6">
@@ -347,7 +319,7 @@ export default function ComplaintPage() {
                     onChange={(e) => setEvidenceHash(e.target.value)}
                     placeholder="证据要求：
 • 照片：产品外观、标签、生产日期等
-• 文档：购买凭证、检验报告、医疗诊断等  
+• 文档：购买凭证、检验报告、医疗诊断等
 • 视频：问题展示、现场记录等
 • 其他：相关证明材料
 
@@ -364,44 +336,26 @@ export default function ComplaintPage() {
                   </p>
                 </div>
 
-
-
                 {/* 提交按钮 */}
                 <div className="pt-6">
                   <button
                     onClick={handleSubmit}
-                    disabled={isSubmitting || showTransactionStatus || hasInsufficientFunds}
-                    className={`w-full text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
-                      hasInsufficientFunds 
-                        ? 'bg-gray-400 text-white cursor-not-allowed' 
-                        : 'btn btn-primary'
-                    }`}
+                    disabled={isSubmitting || showTransactionStatus}
+                    className={`w-full text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                   >
                     {isSubmitting ? (
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                         提交中...
                       </div>
-                    ) : hasInsufficientFunds ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <FaExclamationTriangle className="w-5 h-5" />
-                        余额不足，无法支付Gas费用
-                      </div>
                     ) : (
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center gap-2 bg-emerald-500 rounded-full h-full">
                         <FaPlus className="w-5 h-5" />
                         创建投诉
                       </div>
                     )}
                   </button>
-                  
-                  <p className="text-xs text-muted text-center mt-2">
-                    {hasInsufficientFunds 
-                      ? `需要充值 ${(totalEstimatedCost - userBalance).toFixed(4)} ETH 才能支付Gas费用`
-                      : '点击创建投诉即表示您同意承担相应的法律责任'
-                    }
-                  </p>
-                  
+
                   {/* 余额错误提示 */}
                   {errors.balance && (
                     <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
@@ -422,7 +376,7 @@ export default function ComplaintPage() {
                       chainId={chainId}
                       onSuccess={(receipt) => {
                         console.log('投诉交易确认成功:', receipt);
-                        
+
                         // 使用新的确认和数据刷新逻辑
                         if (txHash) {
                           confirmTransactionAndRefresh({
@@ -432,11 +386,11 @@ export default function ComplaintPage() {
                           }, {
                             onSuccess: () => {
                               console.log('投诉创建完成，数据已更新');
-                              
+
                               // 清理状态
                               setShowTransactionStatus(false);
                               setTxHash(undefined);
-                              
+
                               // 延迟跳转到案件列表页面
                               setTimeout(() => {
                                 router.push('/cases');
@@ -463,12 +417,12 @@ export default function ComplaintPage() {
             </div>
           </div>
         </div>
-        
+
 
       </div>
-      
+
       {/* Toast 通知组件 */}
-      <Toaster 
+      <Toaster
         position="top-right"
         toastOptions={{
           duration: 4000,
@@ -480,4 +434,4 @@ export default function ComplaintPage() {
       />
     </div>
   );
-} 
+}
